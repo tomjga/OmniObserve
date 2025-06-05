@@ -1,0 +1,119 @@
+### Global ignores ###
+*~
+*.bak
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/
+*.env
+*.secret
+*.key
+*.pem
+*.cert
+*.crt
+*.pub
+*.gpg
+*.pgp
+*_history
+.env*
+.secret*
+vault.tfvars
+terraform.tfvars
+*.tfvars
+**/override.yaml
+**/values-local.yaml
+
+### LGTM/ELS Stack ###
+# Loki/Grafana
+**/data/
+**/plugins/
+**/grafana.ini
+
+# Elasticsearch
+**/data/*/
+**/logs/
+
+### Golang ###
+# Binaries
+*.exe
+*.out
+*.test
+*.prof
+bin/
+dist/
+
+# Dependency directories
+vendor/
+**/__pycache__/
+
+### Python ###
+# Bytecode and cache
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Environments
+.env/
+.venv/
+venv/
+env/
+ENV/
+
+# Package files
+*.egg-info/
+*.egg
+dist/
+build/
+pip-wheel-metadata/
+
+# pytest
+.pytest_cache/
+.coverage
+
+### HELM ###
+# Dependencies and releases
+charts/
+tmp/
+*.tgz
+
+# Local helm files
+requirements.lock
+
+### ArgoCD ###
+# Application manifests with secrets
+*-secret.yaml
+*credentials*.yaml
+
+# Temporary files
+argocd-repo-tmp-*/
+
+### Terraform ###
+# Local state & backup
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.terraform.lock.hcl
+
+# Crash logs
+crash.log
+
+# Plan output
+*.tfplan
+
+# Override files
+override.tf
+override.tf.json
+
+# Cache
+.terraform/
+.terragrunt-cache/
+
+### Datadog ###
+# Local config files
+datadog.yaml
+**/datadog/conf.d/*.yaml
+**/datadog/checks.d/*.py
