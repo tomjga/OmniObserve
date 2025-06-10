@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/vlalpha1
+kind: Application
+metadata:
+  name: omniobserve
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/tomjga/OmniObserve.git
+    targetRevision: HEAD #Latest on GitHub
+    path: application 
+  destination:
+    server: https://kubernetes.default.svc #Internal Service
+    namespace: omniobserve
+  
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+
+# Pulls and applies Changes every 3 minutes in enabled for automatic sync
+#    automated:
+#      selfHeal: true
+#      prune: true

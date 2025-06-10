@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: omniobserve
+  name: omniobserve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omniobserve
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: omniobserve
+    spec:
+      containers:
+      - image: go-kpi-monitor
+        name: go-kpi-monitor
+        resources: {}
+status: {}

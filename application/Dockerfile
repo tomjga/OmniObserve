@@ -30,7 +30,7 @@ RUN apk add --no-cache ca-certificates
 COPY --from=builder /app/kpi-monitor /app/
 
 # Expose port
-EXPOSE 8080
+EXPOSE 9000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s \
