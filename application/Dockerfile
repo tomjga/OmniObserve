@@ -1,41 +1,41 @@
 # Build stage
 FROM golang:1.23-alpine AS builder
-
 WORKDIR /app
 
-# Initialize Go module if go.mod doesn't exist
-RUN test -f go.mod || go mod init kpi-monitor
+# 1. Init module (if absent)
+RUN test -f go.mod || go mod init go-kpi-monitor
 
-# Copy dependency files first to leverage Docker cache
+# 2. Copy deps and download
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
+# 3. Copy source and docs folder
 COPY main.go ./
+COPY docs ./docs
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o kpi-monitor .
+# 4. Re-generate swagger if you want to keep it dynamic:
+ RUN go install github.com/swaggo/swag/cmd/swag@latest \
+ && swag init --generalInfo main.go --output ./docs
+
+# 5. Build static binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o go-kpi-monitor .
 
 # Runtime stage
 FROM alpine:3.18
-
 WORKDIR /app
 
-# Install CA certificates for HTTPS
+# CA certs for HTTPS calls
 RUN apk add --no-cache ca-certificates
 
-# Copy binary from builder
-COPY --from=builder /app/kpi-monitor /app/
+# Copy the binary and docs (so swagger.json lives alongside)
+COPY --from=builder /app/go-kpi-monitor /app/
+COPY --from=builder /app/docs /app/docs
 
-# Expose port
-EXPOSE 9000
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD wget --quiet --tries=1 --spider http://localhost:8080/healthz || exit 1
 
-# Run the application as non-root user
 USER 65534:65534
-CMD ["/app/kpi-monitor"]
+CMD ["/app/go-kpi-monitor"]

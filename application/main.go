@@ -1,5 +1,4 @@
 package main
-
 import (
 	"context"
 	"math/rand"
@@ -8,9 +7,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	
+)
+import (
+	ginSwagger "github.com/swaggo/gin-swagger"
+  	swaggerFiles "github.com/swaggo/files"
+	_ "github.com/tomjga/OmniObserve/application/docs"
 )
 
 // Metrics setup
@@ -32,27 +39,7 @@ var (
 	)
 )
 
-func init() {
-	prometheus.MustRegister(requestsTotal, requestDuration)
-}
 
-// prometheusMiddleware records metrics for all requests
-func prometheusMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-		duration := time.Since(start)
-
-		statusCode := c.Writer.Status()
-		requestsTotal.WithLabelValues(
-			http.StatusText(statusCode),
-			c.Request.Method,
-			c.FullPath(),
-		).Inc()
-
-		requestDuration.WithLabelValues(c.FullPath()).Observe(duration.Seconds())
-	}
-}
 
 func main() {
 	// Initialize Datadog tracer
@@ -65,7 +52,7 @@ func main() {
 	router := gin.Default()
 	
 	// Add middleware
-	router.Use(prometheusMiddleware())
+	router.Use(metricsHandler())
 	router.Use(timeoutMiddleware(30 * time.Second)) // Add timeout middleware
 
 	// KPI testing endpoints with configurable parameters
@@ -95,8 +82,9 @@ func main() {
 	// Metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
+	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	// Start server with error handling
-	if err := router.Run(":9000"); err != nil {
+	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}
 }
@@ -111,13 +99,6 @@ func timeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	}
 }
 
-// healthHandler implements a simple health check
-func healthHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"version": "1.0.0",
-	})
-}
 
 // Request structures
 type AvailabilityRequest struct {
@@ -137,7 +118,67 @@ type BenchmarkRequest struct {
 	MaxDelay *int `json:"max_delay"`
 }
 
-// availabilityHandler handles multiple HTTP methods with JSON input
+func init() {
+	prometheus.MustRegister(requestsTotal, requestDuration)
+}
+
+// @Summary      Prometheus metrics
+// @Description  Expose Prometheus-formatted metrics for this service
+// @Tags         metrics
+// @Produce      plain
+// @Success      200  {string}  string  "metrics data"
+// @Router       /metrics [get]
+func metricsHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		duration := time.Since(start)
+
+		statusCode := c.Writer.Status()
+		requestsTotal.WithLabelValues(
+			http.StatusText(statusCode),
+			c.Request.Method,
+			c.FullPath(),
+		).Inc()
+
+		requestDuration.WithLabelValues(c.FullPath()).Observe(duration.Seconds())
+	}
+}
+
+// @Summary      Health check
+// @Description  Returns service health and version
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "service status"
+// @Router       /healthz [get]
+func healthHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "ok",
+		"version": "1.0.0",
+	})
+}
+
+// @Summary      Check availability
+// @Description  Simulate service availability with configurable success rate via query parameter
+// @Tags         kpi
+// @Produce      json
+// @Param        success_rate  query     number                  false  "Success rate (0–100)"   default(99.9)
+// @Success      200           {object}  map[string]interface{}  "available response"
+// @Failure      503           {object}  map[string]interface{}  "unavailable response"
+// @Router       /kpi/availability [get]
+
+// @Summary      Check availability
+// @Description  Simulate service availability with configurable success rate
+// @Tags         kpi
+// @Accept       json
+// @Produce      json
+// @Param        success_rate  query     number                 false  "Success rate (0–100)"           default(99.9)
+// @Param        body          body      AvailabilityRequest     false  "Override success_rate via JSON"
+// @Success      200           {object}  map[string]interface{} "available response"
+// @Failure      503           {object}  map[string]interface{} "unavailable response"
+// @Router       /kpi/availability [post]
+// @Router       /kpi/availability [put]
+// @Router       /kpi/availability [patch]
 func availabilityHandler(c *gin.Context) {
 	var req AvailabilityRequest
 	successRate := 99.9
@@ -173,7 +214,24 @@ func availabilityHandler(c *gin.Context) {
 	}
 }
 
-// performanceHandler handles multiple HTTP methods with JSON input
+// @Summary      Measure performance
+// @Description  Simulate latency with configurable max delay via query parameter
+// @Tags         kpi
+// @Produce      json
+// @Param        max_delay     query     int                     false  "Max delay in ms"        default(500)
+// @Success      200           {object}  map[string]interface{}  "latency response"
+// @Router       /kpi/performance [get]
+
+// @Summary      Measure performance
+// @Description  Simulate latency with configurable max delay
+// @Tags         kpi
+// @Accept       json
+// @Produce      json
+// @Param        body          body      PerformanceRequest      false  "Override max_delay via JSON"
+// @Success      200           {object}  map[string]interface{} "latency response"
+// @Router       /kpi/performance [post]
+// @Router       /kpi/performance [put]
+// @Router       /kpi/performance [patch]
 func performanceHandler(c *gin.Context) {
 	var req PerformanceRequest
 	maxDelay := 500
@@ -202,8 +260,26 @@ func performanceHandler(c *gin.Context) {
 		"method":     c.Request.Method,
 	})
 }
+// @Summary      Simulate errors
+// @Description  Simulate error rate with configurable percentage via query parameter
+// @Tags         kpi
+// @Produce      json
+// @Param        error_rate    query     number                  false  "Error rate (0–100)"     default(5.0)
+// @Success      200           {object}  map[string]interface{}  "successful response"
+// @Failure      500           {object}  map[string]interface{}  "simulated error response"
+// @Router       /kpi/errors [get]
 
-// errorRateHandler handles multiple HTTP methods with JSON input
+// @Summary      Simulate errors
+// @Description  Simulate error rate with configurable percentage
+// @Tags         kpi
+// @Accept       json
+// @Produce      json
+// @Param        body          body      ErrorRateRequest        false  "Override error_rate via JSON"
+// @Success      200           {object}  map[string]interface{} "successful response"
+// @Failure      500           {object}  map[string]interface{} "simulated error response"
+// @Router       /kpi/errors [post]
+// @Router       /kpi/errors [put]
+// @Router       /kpi/errors [patch]
 func errorRateHandler(c *gin.Context) {
 	var req ErrorRateRequest
 	errorRate := 5.0
@@ -238,8 +314,25 @@ func errorRateHandler(c *gin.Context) {
 		})
 	}
 }
+// @Summary      Run benchmark
+// @Description  Simulate a benchmark with configurable delay or max_delay via query parameters
+// @Tags         benchmark
+// @Produce      json
+// @Param        delay         query     int                     false  "Fixed delay in ms"
+// @Param        max_delay     query     int                     false  "Max random delay in ms"  default(500)
+// @Success      200           {object}  map[string]interface{}  "benchmark latency response"
+// @Router       /benchmark [get]
 
-// benchmarkHandler handles multiple HTTP methods with JSON input
+// @Summary      Run benchmark
+// @Description  Simulate a benchmark with configurable delay or max_delay
+// @Tags         benchmark
+// @Accept       json
+// @Produce      json
+// @Param        body          body      BenchmarkRequest        false  "Override delay/max_delay via JSON"
+// @Success      200           {object}  map[string]interface{} "benchmark latency response"
+// @Router       /benchmark [post]
+// @Router       /benchmark [put]
+// @Router       /benchmark [patch]
 func benchmarkHandler(c *gin.Context) {
 	var req BenchmarkRequest
 	var delay time.Duration

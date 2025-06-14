@@ -1,0 +1,531 @@
+definitions:
+  main.AvailabilityRequest:
+    properties:
+      success_rate:
+        type: number
+    type: object
+  main.BenchmarkRequest:
+    properties:
+      delay:
+        description: Pointer to distinguish between 0 and not provided
+        type: integer
+      max_delay:
+        type: integer
+    type: object
+  main.ErrorRateRequest:
+    properties:
+      error_rate:
+        type: number
+    type: object
+  main.PerformanceRequest:
+    properties:
+      max_delay:
+        type: integer
+    type: object
+info:
+  contact: {}
+paths:
+  /benchmark:
+    get:
+      consumes:
+      - application/json
+      description: Simulate a benchmark with configurable delay or max_delay
+      parameters:
+      - description: Fixed delay in ms
+        in: query
+        name: delay
+        type: integer
+      - default: 500
+        description: Max random delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override delay/max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.BenchmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: benchmark latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run benchmark
+      tags:
+      - benchmark
+    patch:
+      consumes:
+      - application/json
+      description: Simulate a benchmark with configurable delay or max_delay
+      parameters:
+      - description: Fixed delay in ms
+        in: query
+        name: delay
+        type: integer
+      - default: 500
+        description: Max random delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override delay/max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.BenchmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: benchmark latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run benchmark
+      tags:
+      - benchmark
+    post:
+      consumes:
+      - application/json
+      description: Simulate a benchmark with configurable delay or max_delay
+      parameters:
+      - description: Fixed delay in ms
+        in: query
+        name: delay
+        type: integer
+      - default: 500
+        description: Max random delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override delay/max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.BenchmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: benchmark latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run benchmark
+      tags:
+      - benchmark
+    put:
+      consumes:
+      - application/json
+      description: Simulate a benchmark with configurable delay or max_delay
+      parameters:
+      - description: Fixed delay in ms
+        in: query
+        name: delay
+        type: integer
+      - default: 500
+        description: Max random delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override delay/max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.BenchmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: benchmark latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run benchmark
+      tags:
+      - benchmark
+  /healthz:
+    get:
+      description: Returns service health and version
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: service status
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /kpi/availability:
+    get:
+      consumes:
+      - application/json
+      description: Simulate service availability with configurable success rate
+      parameters:
+      - default: 99.9
+        description: Success rate (0–100)
+        in: query
+        name: success_rate
+        type: number
+      - description: Override success_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.AvailabilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: available response
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: unavailable response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check availability
+      tags:
+      - kpi
+    patch:
+      consumes:
+      - application/json
+      description: Simulate service availability with configurable success rate
+      parameters:
+      - default: 99.9
+        description: Success rate (0–100)
+        in: query
+        name: success_rate
+        type: number
+      - description: Override success_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.AvailabilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: available response
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: unavailable response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check availability
+      tags:
+      - kpi
+    post:
+      consumes:
+      - application/json
+      description: Simulate service availability with configurable success rate
+      parameters:
+      - default: 99.9
+        description: Success rate (0–100)
+        in: query
+        name: success_rate
+        type: number
+      - description: Override success_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.AvailabilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: available response
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: unavailable response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check availability
+      tags:
+      - kpi
+    put:
+      consumes:
+      - application/json
+      description: Simulate service availability with configurable success rate
+      parameters:
+      - default: 99.9
+        description: Success rate (0–100)
+        in: query
+        name: success_rate
+        type: number
+      - description: Override success_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.AvailabilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: available response
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: unavailable response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check availability
+      tags:
+      - kpi
+  /kpi/errors:
+    get:
+      consumes:
+      - application/json
+      description: Simulate error rate with configurable percentage
+      parameters:
+      - default: 5
+        description: Error rate (0–100)
+        in: query
+        name: error_rate
+        type: number
+      - description: Override error_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.ErrorRateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: simulated error response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Simulate errors
+      tags:
+      - kpi
+    patch:
+      consumes:
+      - application/json
+      description: Simulate error rate with configurable percentage
+      parameters:
+      - default: 5
+        description: Error rate (0–100)
+        in: query
+        name: error_rate
+        type: number
+      - description: Override error_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.ErrorRateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: simulated error response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Simulate errors
+      tags:
+      - kpi
+    post:
+      consumes:
+      - application/json
+      description: Simulate error rate with configurable percentage
+      parameters:
+      - default: 5
+        description: Error rate (0–100)
+        in: query
+        name: error_rate
+        type: number
+      - description: Override error_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.ErrorRateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: simulated error response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Simulate errors
+      tags:
+      - kpi
+    put:
+      consumes:
+      - application/json
+      description: Simulate error rate with configurable percentage
+      parameters:
+      - default: 5
+        description: Error rate (0–100)
+        in: query
+        name: error_rate
+        type: number
+      - description: Override error_rate via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.ErrorRateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: simulated error response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Simulate errors
+      tags:
+      - kpi
+  /kpi/performance:
+    get:
+      consumes:
+      - application/json
+      description: Simulate latency with configurable max delay
+      parameters:
+      - default: 500
+        description: Max delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.PerformanceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Measure performance
+      tags:
+      - kpi
+    patch:
+      consumes:
+      - application/json
+      description: Simulate latency with configurable max delay
+      parameters:
+      - default: 500
+        description: Max delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.PerformanceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Measure performance
+      tags:
+      - kpi
+    post:
+      consumes:
+      - application/json
+      description: Simulate latency with configurable max delay
+      parameters:
+      - default: 500
+        description: Max delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.PerformanceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Measure performance
+      tags:
+      - kpi
+    put:
+      consumes:
+      - application/json
+      description: Simulate latency with configurable max delay
+      parameters:
+      - default: 500
+        description: Max delay in ms
+        in: query
+        name: max_delay
+        type: integer
+      - description: Override max_delay via JSON
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/main.PerformanceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: latency response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Measure performance
+      tags:
+      - kpi
+  /metrics:
+    get:
+      description: Expose Prometheus-formatted metrics for this service
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: metrics data
+          schema:
+            type: string
+      summary: Prometheus metrics
+      tags:
+      - metrics
+swagger: "2.0"
