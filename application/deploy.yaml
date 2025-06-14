@@ -1,24 +1,61 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  creationTimestamp: null
+  name: omniobserve
+  namespace: omniobserve
   labels:
     app: omniobserve
-  name: omniobserve
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: omniobserve
-  strategy: {}
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: omniobserve
     spec:
       containers:
-      - image: go-kpi-monitor
-        name: go-kpi-monitor
-        resources: {}
-status: {}
+      - name: omniobserve
+        image: go-kpi-monitor  
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: omniobserve-svc
+  namespace: omniobserve
+spec:
+  selector:
+    app: omniobserve
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
