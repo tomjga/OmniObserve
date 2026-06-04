@@ -1,0 +1,44 @@
+apiVersion: monitoring.grafana.com/v1alpha1
+kind: PodLogs
+metadata:
+  labels:
+    instance: primary
+  name: kubernetes-pods
+  namespace: monitoring
+spec:
+  pipelineStages:
+    - docker: {}
+    - match: # This is an example to show you how pipeline stages work! such as adding labels to log lines as i did here, This stage is responsible to add http_method as well as http_status_code labels to log lines of all pods inside nginx namespace
+        selector: '{namespace="omniobserve"}'
+        stages: |
+          # Extract the log timestamp ("2025/06/18 - 21:23:49")
+          - regex:
+              expression: '\[GIN\]\s(?P<time>\d{4}/\d{2}/\d{2}\s-\s\d{2}:\d{2}:\d{2})'
+          # Extract the status code (e.g. "200")
+          - regex:
+              expression: '\|\s+(?P<status_code>\d{3})\s+\|'
+          # Extract the request duration (e.g. "35.542µs")
+          - regex:
+              expression: '\|\s+(?P<duration>\d+\.\d+µs)\s+\|'
+          # Extract the HTTP method (GET|POST|PUT|DELETE)
+          - regex:
+              expression: '(?P<method>GET|POST|PUT|DELETE)'
+          # Extract the route (e.g. "/healthz")
+          - regex:
+              expression: '"(?P<route>/[^"]+)"'
+          # Turn captures into labels
+          - labels:
+              http_time: time
+              http_status_code: status_code
+              http_duration: duration
+              http_method: method
+              http_route: route
+          - labels:
+              method:
+              status_code:
+  namespaceSelector:
+    matchNames:
+    - monitoring
+    - omniobserve #Use the correct namespace 
+  selector:
+    matchLabels: {}

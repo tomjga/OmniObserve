@@ -1,0 +1,64 @@
+read:
+  replicas: 1
+  persistence:
+    storageClassName: local-path # Update according to AWS
+  # S3 credentials are injected as AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  # from the loki-s3-secret Secret (see LGTM/secrets/). Loki's S3 client falls
+  # back to these standard env vars when keys are absent from the config below.
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3-secret
+write:
+  replicas: 1
+  persistence:
+    storageClassName: local-path
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3-secret
+backend:
+  replicas: 1
+  persistence:
+    storageClassName: local-path
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3-secret
+loki:
+  schemaConfig:
+    configs:
+      - from: 2025-04-01
+        object_store: s3
+        store: tsdb
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+        chunks:
+          period: 24h
+  auth_enabled: false # Multi-tenancy
+  commonConfig:
+    replication_factor: 1
+  storage:
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-ruler
+    type: s3
+    s3:
+      endpoint: http://minio:9000/ # MinIO endpoint — adjust to your environment (see LGTM/minio/)
+      region: us-east-1
+      # accessKeyId / secretAccessKey intentionally omitted — see extraEnvFrom above.
+      s3ForcePathStyle: true
+      insecure: true
+    #gcs:
+    #  chunkBufferSize: 0
+    #  requestTimeout: "0s"
+    #  enableHttp2: true
+    #azure:
+    #  accountName: null
+    #  accountKey: null
+    #  connectionString: null
+    #  useManagedIdentity: false
+    #  useFederatedToken: false
+    #  userAssignedId: null
+    #  requestTimeout: null
+    #  endpointSuffix: null
+    #  chunkDelimiter: null

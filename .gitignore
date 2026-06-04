@@ -10,13 +10,6 @@
 ### Local Claude working context (never push) ###
 CLAUDE.md
 .claude/
-
-### Stack config that currently embeds credentials — keep OUT of git ###
-# These hold local/throwaway secrets today (MinIO keys, admin password).
-# Phase 0 Step 2 replaces them with secret-free, env-driven versions; remove
-# these ignores once the credentials are externalized.
-LGTM/loki-values.yaml
-LGTM/grafana-values.yaml
 .idea/
 .vscode/
 *.env
@@ -128,3 +121,7 @@ override.tf.json
 datadog.yaml
 **/datadog/conf.d/*.yaml
 **/datadog/checks.d/*.py
+
+### Exceptions (must come last — gitignore is last-match-wins) ###
+# Real .env files stay ignored above; committed examples are allowed.
+!**/.env.example

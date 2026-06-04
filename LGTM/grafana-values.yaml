@@ -1,0 +1,30 @@
+# Admin credentials come from a Kubernetes Secret, not this file.
+# Create it from LGTM/secrets/grafana-admin-secret.yaml.example (gitignored once
+# you drop the .example suffix).
+admin:
+  existingSecret: grafana-admin-secret
+  userKey: admin-user
+  passwordKey: admin-password
+persistence:
+  enabled: true
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        url: http://loki-gateway
+        access: proxy
+        isDefault: true
+        editable: true
+      #- name: Prometheus
+      #  type: prometheus
+      #  url: http://prometheus-server.monitoring
+      #  access: proxy
+      #- name: Tempo
+      #  type: tempo
+      #  url: http://tempo.monitoring
+      #  access: proxy

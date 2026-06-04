@@ -1,0 +1,6 @@
+enabled: true
+prometheusSpec:
+  scrapeConfigs:
+    - job_name: 'omniobserve'
+      static_configs:
+        - targets: ['localhost:8081']
