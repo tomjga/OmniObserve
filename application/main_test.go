@@ -108,7 +108,11 @@ func TestHealth_NoNilLoggerPanic(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	if decode(t, w)["status"] != "ok" {
+	body := decode(t, w)
+	if body["status"] != "ok" {
 		t.Fatalf("want status=ok, got %v", w.Body.String())
+	}
+	if v, _ := body["version"].(string); v == "" {
+		t.Fatal("health response missing version (ldflags injection?)")
 	}
 }

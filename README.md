@@ -9,6 +9,8 @@ reliability loop end to end:
 
 > **chaos injection → SLO breach → alert → automatic rollback → AI-drafted RCA**
 
+📖 **New here? Read the [phase-by-phase journey](docs/) — what each piece is and *why it matters*.**
+
 ---
 
 ## The big picture (target architecture)
@@ -68,8 +70,8 @@ flowchart TB
 
     classDef done fill:#1f6f43,stroke:#0d3,color:#fff;
     classDef plan fill:#444,stroke:#888,color:#ddd,stroke-dasharray:4 3;
-    class api,prom,loki,tempo,grafana,otelcol,argocd,sloth,scan,sign done;
-    class worker,rollout,chaos,am,remediator,rca,issue plan;
+    class api,prom,loki,tempo,grafana,otelcol,argocd,sloth,scan,sign,rollout done;
+    class worker,chaos,am,remediator,rca,issue plan;
 ```
 
 > **Legend:** solid green = built / in place today · dashed grey = on the roadmap.
@@ -116,7 +118,7 @@ sequenceDiagram
 | Phase | Focus | Key tech | Status |
 |------|-------|----------|--------|
 | **0** | Stabilize the base | OpenTelemetry, Go tests, Sloth, Trivy/cosign, Alloy | 🚧 in progress |
-| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | 📋 planned |
+| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | ✅ validated on a local cluster |
 | **2** | Control loop + RCA copilot | Go `remediator`, Claude API | 📋 planned |
 | **3** | Story & polish | Chaos Mesh, demo recording | 📋 planned |
 
@@ -130,7 +132,24 @@ sequenceDiagram
 - ✅ **Supply chain**: image build with SBOM + provenance, cosign keyless signing, Trivy image scan ([`release.yml`](.github/workflows/release.yml))
 - ✅ Grafana LGTM Helm values (secrets externalized), ArgoCD manifests, self-hosted runner
 
-**Remaining Phase 0 polish (not blocking Phase 1):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
+**Phase 1 (progressive delivery):**
+- ✅ Argo **Rollout** (canary) with a shared pod template, toggled by `rollout.enabled` ([`deploy/api-service/`](deploy/api-service/))
+- ✅ **AnalysisTemplate** querying Prometheus (5xx-ratio SLO gate) — auto-aborts and rolls back a bad canary
+- ✅ Install docs ([`argo-rollouts/`](argo-rollouts/)) and a bad-deploy auto-rollback runbook ([`demo/`](demo/))
+- ✅ Validated end-to-end on a local k3s cluster (bad → rollback, good → promote)
+
+**Remaining Phase 0 polish (not blocking):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
+
+## Run it locally
+
+On a clean local cluster (Rancher Desktop / kind / k3d), from the repo root:
+
+```bash
+./bootstrap.sh          # Prometheus Operator + Argo Rollouts + api-service (canary)
+```
+
+Then follow [demo/README.md](demo/) to watch a bad canary auto-roll-back on an SLO breach.
+For rich, real telemetry, add the [OpenTelemetry Demo](workloads/otel-demo/) as a workload.
 
 ---
 
@@ -158,7 +177,11 @@ OmniObserve/
 ├── application/        # Go api-service (OTel-instrumented)  → moves to services/ in Phase 0.2
 ├── collector/          # OTel Collector config + local docker-compose
 ├── slo/                # SLO-as-code (Sloth spec + generated Prometheus rules)
-├── deploy/api-service/ # Helm chart (Deployment, Service, ServiceMonitor)
+├── deploy/api-service/ # Helm chart (Deployment or Rollout, Service, ServiceMonitor, AnalysisTemplate)
+├── bootstrap.sh        # one-command local stack (Prometheus + Argo Rollouts + api-service)
+├── argo-rollouts/      # Argo Rollouts install + progressive-delivery docs
+├── demo/               # SLO-gated auto-rollback walkthrough + load script
+├── workloads/otel-demo # real OTel-native app to observe (rich telemetry + fault injection)
 ├── LGTM/               # Grafana LGTM Helm values (secrets externalized) + local MinIO
 ├── argocd/             # ArgoCD Application manifests
 ├── .github/workflows/  # CI (ci.yml) + signed image release (release.yml)

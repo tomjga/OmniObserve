@@ -1,0 +1,25 @@
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "api-service.fullname" . }}
+  labels:
+    {{- include "api-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "api-service.selectorLabels" . | nindent 6 }}
+  template:
+    {{- include "api-service.podTemplate" . | nindent 4 }}
+  strategy:
+    canary:
+      # Background analysis runs from the first step; a failed SLO query aborts
+      # the rollout and rolls back to the stable ReplicaSet automatically.
+      analysis:
+        startingStep: 1
+        templates:
+          - templateName: {{ include "api-service.fullname" . }}-slo
+      steps:
+        {{- toYaml .Values.rollout.steps | nindent 8 }}
+{{- end }}

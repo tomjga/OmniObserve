@@ -1,0 +1,30 @@
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "api-service.fullname" . }}-slo
+  labels:
+    {{- include "api-service.labels" . | nindent 4 }}
+spec:
+  metrics:
+    - name: error-ratio
+      # Mirrors the availability SLO (slo/): the canary is healthy while the 5xx
+      # ratio stays under the threshold. interval/failureLimit make the gate
+      # responsive enough to abort a bad deploy within ~a minute.
+      interval: {{ .Values.rollout.analysis.interval }}
+      failureLimit: {{ .Values.rollout.analysis.failureLimit }}
+      successCondition: result < {{ .Values.rollout.analysis.errorRatioThreshold }}
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
+          # scalar() forces a Prometheus scalar type — Argo reads a vector as []float64,
+          # which breaks `result < threshold`. 'or vector(0)' keeps the no-5xx case at 0.
+          query: |
+            scalar(
+              (
+                sum(rate(http_requests_total{job="api-service", code=~"5.."}[1m]))
+                /
+                clamp_min(sum(rate(http_requests_total{job="api-service"}[1m])), 1)
+              ) or vector(0)
+            )
+{{- end }}
