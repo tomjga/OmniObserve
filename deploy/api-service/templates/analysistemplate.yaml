@@ -17,10 +17,14 @@ spec:
       provider:
         prometheus:
           address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
+          # scalar() forces a Prometheus scalar type — Argo reads a vector as []float64,
+          # which breaks `result < threshold`. 'or vector(0)' keeps the no-5xx case at 0.
           query: |
-            (
-              sum(rate(http_requests_total{job="api-service", code=~"5.."}[1m]))
-              /
-              clamp_min(sum(rate(http_requests_total{job="api-service"}[1m])), 1)
-            ) or vector(0)
+            scalar(
+              (
+                sum(rate(http_requests_total{job="api-service", code=~"5.."}[1m]))
+                /
+                clamp_min(sum(rate(http_requests_total{job="api-service"}[1m])), 1)
+              ) or vector(0)
+            )
 {{- end }}
