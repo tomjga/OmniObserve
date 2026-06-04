@@ -19,6 +19,22 @@ serviceMonitor:
   enabled: true
   interval: 15s
 
+rollout:
+  # When true, render an Argo Rollout (canary) instead of a Deployment.
+  # Requires the Argo Rollouts controller + CRDs (see ../../argo-rollouts/).
+  enabled: false
+  steps:
+    - setWeight: 25
+    - pause: { duration: 30s }
+    - setWeight: 50
+    - pause: { duration: 30s }
+    - setWeight: 100
+  analysis:
+    interval: 30s
+    failureLimit: 2 # consecutive failed checks tolerated before abort
+    errorRatioThreshold: 0.05 # abort if 5xx ratio >= 5%
+    prometheusAddress: http://prometheus-operated.monitoring:9090
+
 resources:
   requests:
     cpu: 50m
