@@ -10,7 +10,7 @@ This folder documents the project **phase by phase** — not just *what* was bui
 | Phase | Theme | Status |
 |------|-------|--------|
 | [0 — Foundations](phase-0-foundations.md) | A trustworthy base you can observe and ship safely | ✅ done |
-| [1 — Progressive delivery](phase-1-progressive-delivery.md) | Releases that prove themselves before reaching users | ✅ implemented |
+| [1 — Progressive delivery](phase-1-progressive-delivery.md) | Releases that prove themselves before reaching users | ✅ validated |
 | 2 — Auto-remediation + RCA copilot | Telemetry that triggers action, not just alerts; RCAs grounded in an [incident corpus](../incidents/) | ⏳ next |
 
 **The thesis:** observability is only valuable if it drives **decisions and actions**.
