@@ -68,8 +68,8 @@ flowchart TB
 
     classDef done fill:#1f6f43,stroke:#0d3,color:#fff;
     classDef plan fill:#444,stroke:#888,color:#ddd,stroke-dasharray:4 3;
-    class api,prom,loki,tempo,grafana,otelcol,argocd,sloth,scan,sign done;
-    class worker,rollout,chaos,am,remediator,rca,issue plan;
+    class api,prom,loki,tempo,grafana,otelcol,argocd,sloth,scan,sign,rollout done;
+    class worker,chaos,am,remediator,rca,issue plan;
 ```
 
 > **Legend:** solid green = built / in place today · dashed grey = on the roadmap.
@@ -116,7 +116,7 @@ sequenceDiagram
 | Phase | Focus | Key tech | Status |
 |------|-------|----------|--------|
 | **0** | Stabilize the base | OpenTelemetry, Go tests, Sloth, Trivy/cosign, Alloy | 🚧 in progress |
-| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | 📋 planned |
+| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | 🚧 implemented (pending cluster validation) |
 | **2** | Control loop + RCA copilot | Go `remediator`, Claude API | 📋 planned |
 | **3** | Story & polish | Chaos Mesh, demo recording | 📋 planned |
 
@@ -130,7 +130,13 @@ sequenceDiagram
 - ✅ **Supply chain**: image build with SBOM + provenance, cosign keyless signing, Trivy image scan ([`release.yml`](.github/workflows/release.yml))
 - ✅ Grafana LGTM Helm values (secrets externalized), ArgoCD manifests, self-hosted runner
 
-**Remaining Phase 0 polish (not blocking Phase 1):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
+**Phase 1 (progressive delivery):**
+- ✅ Argo **Rollout** (canary) with a shared pod template, toggled by `rollout.enabled` ([`deploy/api-service/`](deploy/api-service/))
+- ✅ **AnalysisTemplate** querying Prometheus (5xx-ratio SLO gate) — auto-aborts and rolls back a bad canary
+- ✅ Install docs ([`argo-rollouts/`](argo-rollouts/)) and a bad-deploy auto-rollback runbook ([`demo/`](demo/))
+- ⏳ End-to-end run pending a local cluster
+
+**Remaining Phase 0 polish (not blocking):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
 
 ---
 
@@ -158,7 +164,9 @@ OmniObserve/
 ├── application/        # Go api-service (OTel-instrumented)  → moves to services/ in Phase 0.2
 ├── collector/          # OTel Collector config + local docker-compose
 ├── slo/                # SLO-as-code (Sloth spec + generated Prometheus rules)
-├── deploy/api-service/ # Helm chart (Deployment, Service, ServiceMonitor)
+├── deploy/api-service/ # Helm chart (Deployment or Rollout, Service, ServiceMonitor, AnalysisTemplate)
+├── argo-rollouts/      # Argo Rollouts install + progressive-delivery docs
+├── demo/               # SLO-gated auto-rollback walkthrough + load script
 ├── LGTM/               # Grafana LGTM Helm values (secrets externalized) + local MinIO
 ├── argocd/             # ArgoCD Application manifests
 ├── .github/workflows/  # CI (ci.yml) + signed image release (release.yml)
