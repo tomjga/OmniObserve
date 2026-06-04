@@ -1,12 +1,160 @@
-# OmniObserve - Multi-Cloud Monitoring Platform
+# OmniObserve
 
-![OmniObserve Architecture](https://via.placeholder.com/800x400.png?text=OmniObserve+Architecture+Diagram)
-*End-to-end observability across cloud providers*
+**A self-healing observability platform: it detects reliability regressions from telemetry and automatically remediates them — with an LLM assist for root-cause analysis.**
 
-OmniObserve is an open-source SRE demonstration platform that implements production-grade monitoring patterns across AWS and Azure while optimizing for free-tier usage. Key capabilities:
+OmniObserve is a hands-on SRE/platform-engineering project built around the modern,
+vendor-neutral observability stack (OpenTelemetry + Grafana LGTM). It runs entirely
+**locally on Kubernetes** — no cloud bill — and is designed to demonstrate the full
+reliability loop end to end:
 
-- 👁️ **Omnichannel Observability** with LGTM, ELK, and Datadog
-- 🎯 **Built-in KPI Generator** for realistic monitoring scenarios
-- 🤖 **Infrastructure-as-Code** with Terraform
-- 🔗 **Unified Dashboards** comparing monitoring solutions
-- 🚦 **Smart Alerting** with incident runbooks
+> **chaos injection → SLO breach → alert → automatic rollback → AI-drafted RCA**
+
+---
+
+## The big picture (target architecture)
+
+```mermaid
+flowchart TB
+    dev["Developer / GitHub"] -->|push| ci
+
+    subgraph ci["CI — GitHub Actions"]
+        test["Go test + vet"] --> build["Build image"]
+        build --> scan["Trivy scan"] --> sign["cosign sign + SBOM"]
+    end
+
+    sign -->|image| argocd["ArgoCD (GitOps)"]
+    argocd -->|sync| rollout
+
+    subgraph cluster["Local Kubernetes (kind / k3d)"]
+        subgraph app["Application"]
+            rollout["Argo Rollouts<br/>(canary)"] --> api["api-service<br/>(Go, OTel)"]
+            worker["worker-service<br/>(synthetic load)"]
+        end
+
+        chaos["Chaos Mesh<br/>(fault injection)"] -.->|inject faults| api
+
+        api -->|OTLP| otelcol["OTel Collector<br/>(fan-out)"]
+        worker -->|OTLP| otelcol
+
+        subgraph lgtm["Grafana LGTM"]
+            prom["Prometheus / Mimir<br/>(metrics)"]
+            loki["Loki<br/>(logs)"]
+            tempo["Tempo<br/>(traces)"]
+            grafana["Grafana<br/>(dashboards)"]
+        end
+
+        otelcol --> prom
+        otelcol --> loki
+        otelcol --> tempo
+        grafana --> prom & loki & tempo
+
+        sloth["Sloth<br/>(SLO-as-code)"] -->|recording + alert rules| prom
+        prom --> am["Alertmanager"]
+
+        rollout -. "AnalysisTemplate<br/>queries SLO metrics" .-> prom
+
+        subgraph control["Auto-remediation"]
+            remediator["remediator<br/>(Go control loop)"]
+            rca["RCA copilot<br/>(Claude API)"]
+        end
+
+        am -->|webhook| remediator
+        remediator -->|rollback / scale| rollout
+        remediator -->|trigger| rca
+        rca -->|read incident window| loki & tempo & prom
+    end
+
+    rca -->|posts RCA draft| issue["GitHub Issue / Slack"]
+
+    classDef done fill:#1f6f43,stroke:#0d3,color:#fff;
+    classDef plan fill:#444,stroke:#888,color:#ddd,stroke-dasharray:4 3;
+    class api,worker,prom,loki,tempo,grafana,otelcol,argocd done;
+    class rollout,chaos,sloth,am,remediator,rca,scan,sign,issue plan;
+```
+
+> **Legend:** solid green = built / in place today · dashed grey = on the roadmap.
+
+---
+
+## The remediation loop (the demo)
+
+This is the 90-second story the whole project builds toward:
+
+```mermaid
+sequenceDiagram
+    participant Chaos as Chaos Mesh
+    participant API as api-service
+    participant Prom as Prometheus + Sloth SLOs
+    participant AM as Alertmanager
+    participant Roll as Argo Rollouts
+    participant Rem as remediator
+    participant RCA as RCA copilot (Claude)
+    participant Git as GitHub Issue
+
+    Chaos->>API: inject failure (spike error rate)
+    API->>Prom: emit metrics / logs / traces (via OTel)
+    Prom->>Prom: SLO burn-rate threshold breached
+    Prom->>AM: fire alert
+
+    par Progressive delivery reacts
+        Roll->>Prom: AnalysisTemplate query
+        Prom-->>Roll: error budget failing
+        Roll->>Roll: auto-abort + rollback canary
+    and Control loop reacts
+        AM->>Rem: webhook
+        Rem->>RCA: trigger root-cause analysis
+        RCA->>Prom: read metrics for incident window
+        RCA->>RCA: summarize logs + traces + metrics
+        RCA->>Git: post structured RCA draft
+    end
+```
+
+---
+
+## Roadmap & status
+
+| Phase | Focus | Key tech | Status |
+|------|-------|----------|--------|
+| **0** | Stabilize the base | OpenTelemetry, Go tests, Sloth, Trivy/cosign, Alloy | 🚧 in progress |
+| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | 📋 planned |
+| **2** | Control loop + RCA copilot | Go `remediator`, Claude API | 📋 planned |
+| **3** | Story & polish | Chaos Mesh, demo recording | 📋 planned |
+
+**Built today (Phase 0 so far):**
+- ✅ `api-service` — Go/Gin service with configurable KPI endpoints (availability, latency, error rate, benchmark), Swagger docs
+- ✅ **OpenTelemetry tracing** via the OTel SDK + `otelgin` (migrated off DataDog)
+- ✅ Prometheus metrics on `/metrics`, structured logging via zap
+- ✅ Grafana LGTM Helm values, ArgoCD application manifests, self-hosted GitHub Actions runner
+
+**Next up:** OTel Collector fan-out · fix + harden CI · SLO-as-code · supply-chain signing · real local-K8s Helm chart.
+
+---
+
+## Architecture decisions worth calling out
+
+- **OTel Collector as the fan-out layer**, not direct SDK→backend export. Services emit one
+  vendor-neutral OTLP stream; backends can change without touching service code.
+- **Metrics stay on Prometheus `/metrics`** (scrape model) while traces go through OTel —
+  the OTel Prometheus bridge keeps existing scrape infrastructure working unchanged.
+- **Local-first, $0 cost.** Everything runs on kind/k3d + Docker Compose. The reliability
+  patterns (SLOs, progressive delivery, auto-remediation) don't need a cloud bill to be real.
+
+---
+
+## Tech stack
+
+`Go` · `OpenTelemetry` · `Prometheus` · `Loki` · `Tempo` · `Grafana` · `Argo Rollouts` ·
+`ArgoCD` · `Sloth` · `Chaos Mesh` · `Kubernetes (kind/k3d)` · `GitHub Actions` ·
+`Trivy` · `cosign` · `Claude API`
+
+## Repository layout
+
+```
+OmniObserve/
+├── application/        # Go api-service (OTel-instrumented)  → moves to services/ in Phase 0.2
+├── LGTM/               # Grafana LGTM Helm values + local MinIO
+├── argocd/             # ArgoCD Application manifests
+├── workflows/          # GitHub Actions (CI/CD)
+├── runner/             # Self-hosted GHA runner image
+└── infrastructure/     # Terraform (AWS skeleton — parked; local-first for now)
+```

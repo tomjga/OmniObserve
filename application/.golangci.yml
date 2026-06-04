@@ -1,0 +1,14 @@
+version: "2"
+
+# Focused, high-signal linter set. gosec is intentionally left out for now: this
+# service uses math/rand for KPI simulation (not security), so its G404 "weak
+# random" finding would be pure noise. Add it with that exclusion later.
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
