@@ -6,6 +6,10 @@
 *.swp
 *.swo
 .DS_Store
+
+### Local Claude working context (never push) ###
+CLAUDE.md
+.claude/
 .idea/
 .vscode/
 *.env
@@ -117,3 +121,7 @@ override.tf.json
 datadog.yaml
 **/datadog/conf.d/*.yaml
 **/datadog/checks.d/*.py
+
+### Exceptions (must come last — gitignore is last-match-wins) ###
+# Real .env files stay ignored above; committed examples are allowed.
+!**/.env.example

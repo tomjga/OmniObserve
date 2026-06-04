@@ -1,4 +1,5 @@
 package main
+
 import (
 	"context"
 	"math/rand"
@@ -6,19 +7,25 @@ import (
 	"strconv"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
-	
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 import (
+	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-  	swaggerFiles "github.com/swaggo/files"
 	_ "github.com/tomjga/OmniObserve/application/docs"
 )
+
+// Global logger
+var logger *zap.SugaredLogger
 
 // Metrics setup
 var (
@@ -39,46 +46,52 @@ var (
 	)
 )
 
-
-
 func main() {
-	// Initialize Datadog tracer
-	tracer.Start(
-		tracer.WithService("kpi-service"),
-		tracer.WithEnv("production"),
-	)
-	defer tracer.Stop()
+	// Initialize OpenTelemetry tracing (replaces the old Datadog tracer).
+	shutdownTracer, err := initTracer()
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = shutdownTracer(context.Background()) }()
 
-	router := gin.Default()
-	
+	// Setup Zap logger. Assign the package-level `logger` so handlers that log
+	// (healthHandler, availabilityHandler) use a real logger instead of nil.
+	zapLogger, _ := zap.NewProduction() // or zap.NewDevelopment() for local
+	defer func() { _ = zapLogger.Sync() }()
+	logger = zapLogger.Sugar()
+
 	// Add middleware
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(otelgin.Middleware("api-service")) // one span per HTTP request
 	router.Use(metricsHandler())
-	router.Use(timeoutMiddleware(30 * time.Second)) // Add timeout middleware
+	router.Use(timeoutMiddleware(30 * time.Second))
+	router.Use(zapLoggerMiddleware(logger))
 
 	// KPI testing endpoints with configurable parameters
 	router.GET("/kpi/availability", availabilityHandler)
 	router.POST("/kpi/availability", availabilityHandler)
 	router.PUT("/kpi/availability", availabilityHandler)
 	router.PATCH("/kpi/availability", availabilityHandler)
-	
+
 	router.GET("/kpi/performance", performanceHandler)
 	router.POST("/kpi/performance", performanceHandler)
 	router.PUT("/kpi/performance", performanceHandler)
 	router.PATCH("/kpi/performance", performanceHandler)
-	
+
 	router.GET("/kpi/errors", errorRateHandler)
 	router.POST("/kpi/errors", errorRateHandler)
 	router.PUT("/kpi/errors", errorRateHandler)
 	router.PATCH("/kpi/errors", errorRateHandler)
-	
+
 	router.GET("/benchmark", benchmarkHandler)
 	router.POST("/benchmark", benchmarkHandler)
 	router.PUT("/benchmark", benchmarkHandler)
 	router.PATCH("/benchmark", benchmarkHandler)
-	
+
 	// Health check endpoint
 	router.GET("/healthz", healthHandler)
-	
+
 	// Metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -99,6 +112,30 @@ func timeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	}
 }
 
+func zapLoggerMiddleware(logger *zap.SugaredLogger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		latency := time.Since(start)
+		status := c.Writer.Status()
+
+		logFn := logger.Infof
+		switch {
+		case status >= 500:
+			logFn = logger.Errorf
+		case status >= 400:
+			logFn = logger.Warnf
+		}
+
+		logFn("%3d | %13v | %-7s %s | IP: %s",
+			status,
+			latency,
+			c.Request.Method,
+			c.Request.URL.Path,
+			c.ClientIP(),
+		)
+	}
+}
 
 // Request structures
 type AvailabilityRequest struct {
@@ -114,7 +151,7 @@ type ErrorRateRequest struct {
 }
 
 type BenchmarkRequest struct {
-	Delay    *int `json:"delay"`    // Pointer to distinguish between 0 and not provided
+	Delay    *int `json:"delay"` // Pointer to distinguish between 0 and not provided
 	MaxDelay *int `json:"max_delay"`
 }
 
@@ -136,7 +173,7 @@ func metricsHandler() gin.HandlerFunc {
 
 		statusCode := c.Writer.Status()
 		requestsTotal.WithLabelValues(
-			http.StatusText(statusCode),
+			strconv.Itoa(statusCode), // numeric code so SLOs can match code=~"5.."
 			c.Request.Method,
 			c.FullPath(),
 		).Inc()
@@ -152,10 +189,10 @@ func metricsHandler() gin.HandlerFunc {
 // @Success      200  {object}  map[string]interface{}  "service status"
 // @Router       /healthz [get]
 func healthHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"version": "1.0.0",
-	})
+	logger.Infow("healthz",
+		"method", c.Request.Method,
+	)
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "1.0.0"})
 }
 
 // @Summary      Check availability
@@ -193,6 +230,11 @@ func availabilityHandler(c *gin.Context) {
 		}
 	} else {
 		// POST/PUT/PATCH - use JSON body
+		// Log request parameters
+		logger.Infow("availability",
+			"method", c.Request.Method,
+			"success_rate", successRate,
+		)
 		if err := c.ShouldBindJSON(&req); err == nil && req.SuccessRate >= 0 && req.SuccessRate <= 100 {
 			successRate = req.SuccessRate
 		}
@@ -260,6 +302,7 @@ func performanceHandler(c *gin.Context) {
 		"method":     c.Request.Method,
 	})
 }
+
 // @Summary      Simulate errors
 // @Description  Simulate error rate with configurable percentage via query parameter
 // @Tags         kpi
@@ -314,6 +357,7 @@ func errorRateHandler(c *gin.Context) {
 		})
 	}
 }
+
 // @Summary      Run benchmark
 // @Description  Simulate a benchmark with configurable delay or max_delay via query parameters
 // @Tags         benchmark
@@ -345,7 +389,7 @@ func benchmarkHandler(c *gin.Context) {
 				delay = time.Duration(d) * time.Millisecond
 			}
 		}
-		
+
 		if delay == 0 {
 			maxDelay := 500
 			if maxParam := c.Query("max_delay"); maxParam != "" {
@@ -375,12 +419,13 @@ func benchmarkHandler(c *gin.Context) {
 	start := time.Now()
 	time.Sleep(delay)
 	latency := time.Since(start)
-	
-	// Track latency in Datadog
-	if span, ok := tracer.SpanFromContext(c.Request.Context()); ok {
-		span.SetTag("latency_ms", latency.Milliseconds())
-	}
-	
+
+	// Annotate the request span (created by otelgin) with the measured latency.
+	// SpanFromContext returns a no-op span if none exists, so no nil check needed.
+	trace.SpanFromContext(c.Request.Context()).SetAttributes(
+		attribute.Int64("latency_ms", latency.Milliseconds()),
+	)
+
 	c.JSON(http.StatusOK, gin.H{
 		"latency_ms": latency.Milliseconds(),
 		"delay_ms":   delay.Milliseconds(),

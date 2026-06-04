@@ -1,0 +1,43 @@
+# SLO-as-code (Sloth). Generate Prometheus rules with:
+#   sloth generate -i slo/api-service.slo.yaml -o slo/api-service.rules.yaml
+# The generated rules (SLI recordings, error budget, multi-burn-rate alerts) are
+# what Prometheus loads and what Phase 1's Argo Rollouts AnalysisTemplate queries.
+version: prometheus/v1
+service: api-service
+labels:
+  owner: sre
+slos:
+  - name: availability
+    objective: 99.5
+    description: 99.5% of requests are not server errors (5xx).
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{job="api-service", code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_requests_total{job="api-service"}[{{.window}}]))
+    alerting:
+      name: ApiServiceHighErrorRate
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+
+  - name: latency-p95
+    objective: 95.0
+    description: 95% of requests complete in under 500ms.
+    sli:
+      events:
+        error_query: >-
+          sum(rate(http_request_duration_seconds_count{job="api-service"}[{{.window}}]))
+          -
+          sum(rate(http_request_duration_seconds_bucket{job="api-service", le="0.5"}[{{.window}}]))
+        total_query: sum(rate(http_request_duration_seconds_count{job="api-service"}[{{.window}}]))
+    alerting:
+      name: ApiServiceHighLatency
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
