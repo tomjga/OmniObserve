@@ -118,7 +118,7 @@ sequenceDiagram
 | Phase | Focus | Key tech | Status |
 |------|-------|----------|--------|
 | **0** | Stabilize the base | OpenTelemetry, Go tests, Sloth, Trivy/cosign, Alloy | 🚧 in progress |
-| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | 🚧 implemented (pending cluster validation) |
+| **1** | Progressive delivery | Argo Rollouts + Prometheus AnalysisTemplate | ✅ validated on a local cluster |
 | **2** | Control loop + RCA copilot | Go `remediator`, Claude API | 📋 planned |
 | **3** | Story & polish | Chaos Mesh, demo recording | 📋 planned |
 
@@ -136,7 +136,7 @@ sequenceDiagram
 - ✅ Argo **Rollout** (canary) with a shared pod template, toggled by `rollout.enabled` ([`deploy/api-service/`](deploy/api-service/))
 - ✅ **AnalysisTemplate** querying Prometheus (5xx-ratio SLO gate) — auto-aborts and rolls back a bad canary
 - ✅ Install docs ([`argo-rollouts/`](argo-rollouts/)) and a bad-deploy auto-rollback runbook ([`demo/`](demo/))
-- ⏳ End-to-end run pending a local cluster
+- ✅ Validated end-to-end on a local k3s cluster (bad → rollback, good → promote)
 
 **Remaining Phase 0 polish (not blocking):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
 
