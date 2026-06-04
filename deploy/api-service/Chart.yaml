@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api-service
+description: OmniObserve api-service — OTel-instrumented KPI generator
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

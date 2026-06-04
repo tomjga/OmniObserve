@@ -87,3 +87,12 @@ jobs:
           sloth generate -i slo/api-service.slo.yaml -o slo/api-service.rules.yaml
           git diff --exit-code -- slo/api-service.rules.yaml \
             || { echo "::error::slo/api-service.rules.yaml is out of date — run 'sloth generate'"; exit 1; }
+
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/api-service
+      - run: helm template api-service deploy/api-service > /dev/null
