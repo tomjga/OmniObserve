@@ -1,11 +1,10 @@
-run:
-  timeout: 5m
+version: "2"
 
-# Start with a focused, high-signal linter set. gosec is intentionally left out
-# for now: this service uses math/rand for KPI simulation (not security), so its
-# G404 "weak random" finding would be pure noise. Add it with that exclusion later.
+# Focused, high-signal linter set. gosec is intentionally left out for now: this
+# service uses math/rand for KPI simulation (not security), so its G404 "weak
+# random" finding would be pure noise. Add it with that exclusion later.
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
     - govet
