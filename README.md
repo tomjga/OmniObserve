@@ -68,8 +68,8 @@ flowchart TB
 
     classDef done fill:#1f6f43,stroke:#0d3,color:#fff;
     classDef plan fill:#444,stroke:#888,color:#ddd,stroke-dasharray:4 3;
-    class api,worker,prom,loki,tempo,grafana,otelcol,argocd done;
-    class rollout,chaos,sloth,am,remediator,rca,scan,sign,issue plan;
+    class api,prom,loki,tempo,grafana,otelcol,argocd,sloth,scan,sign done;
+    class worker,rollout,chaos,am,remediator,rca,issue plan;
 ```
 
 > **Legend:** solid green = built / in place today · dashed grey = on the roadmap.
@@ -120,13 +120,17 @@ sequenceDiagram
 | **2** | Control loop + RCA copilot | Go `remediator`, Claude API | 📋 planned |
 | **3** | Story & polish | Chaos Mesh, demo recording | 📋 planned |
 
-**Built today (Phase 0 so far):**
+**Built today (Phase 0):**
 - ✅ `api-service` — Go/Gin service with configurable KPI endpoints (availability, latency, error rate, benchmark), Swagger docs
-- ✅ **OpenTelemetry tracing** via the OTel SDK + `otelgin` (migrated off DataDog)
-- ✅ Prometheus metrics on `/metrics`, structured logging via zap
-- ✅ Grafana LGTM Helm values, ArgoCD application manifests, self-hosted GitHub Actions runner
+- ✅ **OpenTelemetry tracing** via the OTel SDK + `otelgin`, exported **OTLP/gRPC to an OTel Collector** that fans out to Tempo/Prometheus/Loki ([`collector/`](collector/))
+- ✅ Prometheus metrics on `/metrics` (numeric status codes), structured logging via zap
+- ✅ **SLO-as-code** with Sloth — availability + latency SLOs → Prometheus burn-rate rules ([`slo/`](slo/))
+- ✅ **Helm chart** for the app with a ServiceMonitor ([`deploy/api-service/`](deploy/api-service/))
+- ✅ **CI**: vet/test (race)/build, golangci-lint, govulncheck, Trivy (deps + secrets), SLO-drift guard, helm lint
+- ✅ **Supply chain**: image build with SBOM + provenance, cosign keyless signing, Trivy image scan ([`release.yml`](.github/workflows/release.yml))
+- ✅ Grafana LGTM Helm values (secrets externalized), ArgoCD manifests, self-hosted runner
 
-**Next up:** OTel Collector fan-out · fix + harden CI · SLO-as-code · supply-chain signing · real local-K8s Helm chart.
+**Remaining Phase 0 polish (not blocking Phase 1):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
 
 ---
 
@@ -152,9 +156,12 @@ sequenceDiagram
 ```
 OmniObserve/
 ├── application/        # Go api-service (OTel-instrumented)  → moves to services/ in Phase 0.2
-├── LGTM/               # Grafana LGTM Helm values + local MinIO
+├── collector/          # OTel Collector config + local docker-compose
+├── slo/                # SLO-as-code (Sloth spec + generated Prometheus rules)
+├── deploy/api-service/ # Helm chart (Deployment, Service, ServiceMonitor)
+├── LGTM/               # Grafana LGTM Helm values (secrets externalized) + local MinIO
 ├── argocd/             # ArgoCD Application manifests
-├── workflows/          # GitHub Actions (CI/CD)
+├── .github/workflows/  # CI (ci.yml) + signed image release (release.yml)
 ├── runner/             # Self-hosted GHA runner image
 └── infrastructure/     # Terraform (AWS skeleton — parked; local-first for now)
 ```
