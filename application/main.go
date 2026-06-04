@@ -27,6 +27,10 @@ import (
 // Global logger
 var logger *zap.SugaredLogger
 
+// version is injected at build time via -ldflags "-X main.version=<git version>".
+// Defaults to "dev" for local `go run`/tests so every build self-identifies.
+var version = "dev"
+
 // Metrics setup
 var (
 	requestsTotal = prometheus.NewCounterVec(
@@ -192,7 +196,7 @@ func healthHandler(c *gin.Context) {
 	logger.Infow("healthz",
 		"method", c.Request.Method,
 	)
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "1.0.0"})
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "version": version})
 }
 
 // @Summary      Check availability

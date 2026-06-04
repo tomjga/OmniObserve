@@ -26,9 +26,10 @@ exporters:
     endpoint: tempo:4317
     tls:
       insecure: true
-  # Metrics -> Prometheus/Mimir remote-write.
+  # Metrics -> kube-prometheus-stack Prometheus (needs enableRemoteWriteReceiver,
+  # which bootstrap.sh sets). prometheus-operated is the Operator's headless service.
   prometheusremotewrite:
-    endpoint: http://prometheus-server/api/v1/write
+    endpoint: http://prometheus-operated:9090/api/v1/write
     tls:
       insecure: true
   # Logs -> Loki's native OTLP ingest endpoint (otlphttp appends /v1/logs).

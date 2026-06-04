@@ -9,6 +9,8 @@ reliability loop end to end:
 
 > **chaos injection → SLO breach → alert → automatic rollback → AI-drafted RCA**
 
+📖 **New here? Read the [phase-by-phase journey](docs/) — what each piece is and *why it matters*.**
+
 ---
 
 ## The big picture (target architecture)
@@ -138,6 +140,17 @@ sequenceDiagram
 
 **Remaining Phase 0 polish (not blocking):** restructure into `services/` + a `worker-service` load generator; retire the deprecated Grafana Agent in favour of Alloy.
 
+## Run it locally
+
+On a clean local cluster (Rancher Desktop / kind / k3d), from the repo root:
+
+```bash
+./bootstrap.sh          # Prometheus Operator + Argo Rollouts + api-service (canary)
+```
+
+Then follow [demo/README.md](demo/) to watch a bad canary auto-roll-back on an SLO breach.
+For rich, real telemetry, add the [OpenTelemetry Demo](workloads/otel-demo/) as a workload.
+
 ---
 
 ## Architecture decisions worth calling out
@@ -165,8 +178,10 @@ OmniObserve/
 ├── collector/          # OTel Collector config + local docker-compose
 ├── slo/                # SLO-as-code (Sloth spec + generated Prometheus rules)
 ├── deploy/api-service/ # Helm chart (Deployment or Rollout, Service, ServiceMonitor, AnalysisTemplate)
+├── bootstrap.sh        # one-command local stack (Prometheus + Argo Rollouts + api-service)
 ├── argo-rollouts/      # Argo Rollouts install + progressive-delivery docs
 ├── demo/               # SLO-gated auto-rollback walkthrough + load script
+├── workloads/otel-demo # real OTel-native app to observe (rich telemetry + fault injection)
 ├── LGTM/               # Grafana LGTM Helm values (secrets externalized) + local MinIO
 ├── argocd/             # ArgoCD Application manifests
 ├── .github/workflows/  # CI (ci.yml) + signed image release (release.yml)

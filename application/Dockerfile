@@ -17,8 +17,9 @@ COPY docs ./docs
  RUN go install github.com/swaggo/swag/cmd/swag@latest \
  && swag init --generalInfo main.go --output ./docs
 
-# 5. Build static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o go-kpi-monitor .
+# 5. Build static binary, stamping the version (passed via --build-arg VERSION=...)
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -X main.version=${VERSION}" -o go-kpi-monitor .
 
 # Runtime stage
 FROM alpine:3.21

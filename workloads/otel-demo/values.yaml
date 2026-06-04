@@ -1,0 +1,25 @@
+# Helm values for the OpenTelemetry Demo (open-telemetry/opentelemetry-demo),
+# wired to route ALL telemetry into OmniObserve's collector instead of the demo's
+# own bundled stack.
+#
+# Verify the keys against your chart version first:
+#   helm show values open-telemetry/opentelemetry-demo | less
+# (Subchart toggle names occasionally change between releases.)
+
+# Disable the demo's bundled observability — we use OmniObserve's collector + LGTM.
+opentelemetry-collector:
+  enabled: false
+jaeger:
+  enabled: false
+prometheus:
+  enabled: false
+grafana:
+  enabled: false
+opensearch:
+  enabled: false
+
+# Point every instrumented service at OmniObserve's collector.
+default:
+  envOverrides:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://otelcol.monitoring.svc.cluster.local:4317
