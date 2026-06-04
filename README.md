@@ -9,6 +9,8 @@ reliability loop end to end:
 
 > **chaos injection → SLO breach → alert → automatic rollback → AI-drafted RCA**
 
+📖 **New here? Read the [phase-by-phase journey](docs/) — what each piece is and *why it matters*.**
+
 ---
 
 ## The big picture (target architecture)
