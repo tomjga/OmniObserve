@@ -1,4 +1,5 @@
 package main
+
 import (
 	"context"
 	"math/rand"
@@ -18,13 +19,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 import (
+	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-  	swaggerFiles "github.com/swaggo/files"
 	_ "github.com/tomjga/OmniObserve/application/docs"
 )
 
 // Global logger
-var logger *zap.SugaredLogger	
+var logger *zap.SugaredLogger
 
 // Metrics setup
 var (
@@ -45,20 +46,18 @@ var (
 	)
 )
 
-
-
 func main() {
 	// Initialize OpenTelemetry tracing (replaces the old Datadog tracer).
 	shutdownTracer, err := initTracer()
 	if err != nil {
 		panic(err)
 	}
-	defer shutdownTracer(context.Background())
+	defer func() { _ = shutdownTracer(context.Background()) }()
 
 	// Setup Zap logger. Assign the package-level `logger` so handlers that log
 	// (healthHandler, availabilityHandler) use a real logger instead of nil.
 	zapLogger, _ := zap.NewProduction() // or zap.NewDevelopment() for local
-	defer zapLogger.Sync()
+	defer func() { _ = zapLogger.Sync() }()
 	logger = zapLogger.Sugar()
 
 	// Add middleware
@@ -74,25 +73,25 @@ func main() {
 	router.POST("/kpi/availability", availabilityHandler)
 	router.PUT("/kpi/availability", availabilityHandler)
 	router.PATCH("/kpi/availability", availabilityHandler)
-	
+
 	router.GET("/kpi/performance", performanceHandler)
 	router.POST("/kpi/performance", performanceHandler)
 	router.PUT("/kpi/performance", performanceHandler)
 	router.PATCH("/kpi/performance", performanceHandler)
-	
+
 	router.GET("/kpi/errors", errorRateHandler)
 	router.POST("/kpi/errors", errorRateHandler)
 	router.PUT("/kpi/errors", errorRateHandler)
 	router.PATCH("/kpi/errors", errorRateHandler)
-	
+
 	router.GET("/benchmark", benchmarkHandler)
 	router.POST("/benchmark", benchmarkHandler)
 	router.PUT("/benchmark", benchmarkHandler)
 	router.PATCH("/benchmark", benchmarkHandler)
-	
+
 	// Health check endpoint
 	router.GET("/healthz", healthHandler)
-	
+
 	// Metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -152,7 +151,7 @@ type ErrorRateRequest struct {
 }
 
 type BenchmarkRequest struct {
-	Delay    *int `json:"delay"`    // Pointer to distinguish between 0 and not provided
+	Delay    *int `json:"delay"` // Pointer to distinguish between 0 and not provided
 	MaxDelay *int `json:"max_delay"`
 }
 
@@ -233,9 +232,9 @@ func availabilityHandler(c *gin.Context) {
 		// POST/PUT/PATCH - use JSON body
 		// Log request parameters
 		logger.Infow("availability",
-		"method", c.Request.Method,
-		"success_rate", successRate,
-	)
+			"method", c.Request.Method,
+			"success_rate", successRate,
+		)
 		if err := c.ShouldBindJSON(&req); err == nil && req.SuccessRate >= 0 && req.SuccessRate <= 100 {
 			successRate = req.SuccessRate
 		}
@@ -303,6 +302,7 @@ func performanceHandler(c *gin.Context) {
 		"method":     c.Request.Method,
 	})
 }
+
 // @Summary      Simulate errors
 // @Description  Simulate error rate with configurable percentage via query parameter
 // @Tags         kpi
@@ -357,6 +357,7 @@ func errorRateHandler(c *gin.Context) {
 		})
 	}
 }
+
 // @Summary      Run benchmark
 // @Description  Simulate a benchmark with configurable delay or max_delay via query parameters
 // @Tags         benchmark
@@ -388,7 +389,7 @@ func benchmarkHandler(c *gin.Context) {
 				delay = time.Duration(d) * time.Millisecond
 			}
 		}
-		
+
 		if delay == 0 {
 			maxDelay := 500
 			if maxParam := c.Query("max_delay"); maxParam != "" {
