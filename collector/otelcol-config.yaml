@@ -1,0 +1,51 @@
+# OpenTelemetry Collector (contrib) — the vendor-neutral fan-out layer.
+# Services emit a single OTLP stream here; this config routes each signal to the
+# LGTM backends. Swapping a backend means editing only this file, never service code.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Guardrail against unbounded memory use under load.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch: {}
+
+exporters:
+  # Always-on local visibility: prints a summary of every batch to collector logs.
+  debug:
+    verbosity: normal
+  # Traces -> Tempo (OTLP/gRPC).
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # Metrics -> Prometheus/Mimir remote-write.
+  prometheusremotewrite:
+    endpoint: http://prometheus-server/api/v1/write
+    tls:
+      insecure: true
+  # Logs -> Loki's native OTLP ingest endpoint (otlphttp appends /v1/logs).
+  otlphttp/loki:
+    endpoint: http://loki-gateway/otlp
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki, debug]

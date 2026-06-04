@@ -1,0 +1,14 @@
+# Local OTel Collector for development. Run from the repo root:
+#   docker compose -f collector/docker-compose.yaml up
+# Then start api-service; spans flow to :4317 and appear in the collector's
+# debug output (backend exporters only succeed when the LGTM stack is reachable).
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.119.0 # bump to a current contrib release as needed
+    container_name: otelcol
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otelcol-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317" # OTLP/gRPC
+      - "4318:4318" # OTLP/HTTP
