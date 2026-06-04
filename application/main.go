@@ -173,7 +173,7 @@ func metricsHandler() gin.HandlerFunc {
 
 		statusCode := c.Writer.Status()
 		requestsTotal.WithLabelValues(
-			http.StatusText(statusCode),
+			strconv.Itoa(statusCode), // numeric code so SLOs can match code=~"5.."
 			c.Request.Method,
 			c.FullPath(),
 		).Inc()

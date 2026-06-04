@@ -72,3 +72,18 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+
+  slo:
+    name: SLO rules in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go install github.com/slok/sloth/cmd/sloth@latest
+      - name: Regenerate and fail on drift
+        run: |
+          sloth generate -i slo/api-service.slo.yaml -o slo/api-service.rules.yaml
+          git diff --exit-code -- slo/api-service.rules.yaml \
+            || { echo "::error::slo/api-service.rules.yaml is out of date — run 'sloth generate'"; exit 1; }
