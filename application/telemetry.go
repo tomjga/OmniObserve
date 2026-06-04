@@ -30,7 +30,7 @@ func initTracer() (func(context.Context) error, error) {
 	res, err := resource.New(context.Background(),
 		resource.WithAttributes(
 			semconv.ServiceName("api-service"),
-			semconv.ServiceVersion("1.0.0"),
+			semconv.ServiceVersion(version),
 		),
 	)
 	if err != nil {
