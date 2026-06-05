@@ -14,9 +14,13 @@ which makes the auto-remediation story real rather than simulated.
 ./bootstrap-telemetry.sh
 ```
 
-That installs **Tempo** (traces), the **OTel Collector** (using
+That installs **Tempo** in microservices mode
+([`tempo-distributed`](tempo-distributed-values.yaml), from the maintained
+`grafana-community` repo — the single-binary `grafana/tempo` chart is deprecated), the
+**OTel Collector** (using
 [`collector/otelcol-config.yaml`](../../collector/otelcol-config.yaml) via a ConfigMap),
-a **Grafana Tempo datasource**, and the **OpenTelemetry Demo** wired to our collector.
+a **Grafana Tempo datasource** (query-frontend on `:3200`), and the **OpenTelemetry
+Demo** wired to our collector.
 
 [`values.yaml`](values.yaml) disables the demo's bundled observability and points every
 service's `OTEL_EXPORTER_OTLP_ENDPOINT` at `otelcol.monitoring.svc.cluster.local:4317`.

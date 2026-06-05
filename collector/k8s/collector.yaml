@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: otelcol
-          image: otel/opentelemetry-collector-contrib:0.119.0 # bump as needed
+          image: otel/opentelemetry-collector-contrib:0.153.0 # bump as needed
           args: ["--config=/etc/otelcol/config.yaml"]
           ports:
             - { name: otlp-grpc, containerPort: 4317 }

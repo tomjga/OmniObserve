@@ -14,5 +14,6 @@ data:
       - name: Tempo
         type: tempo
         access: proxy
-        url: http://tempo:3100
+        # tempo-distributed serves the query API from query-frontend on :3200.
+        url: http://tempo-query-frontend:3200
         uid: tempo

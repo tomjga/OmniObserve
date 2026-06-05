@@ -24,12 +24,15 @@ case "$CTX" in
   *) [ "${FORCE:-0}" = "1" ] || { echo "ERROR: '$CTX' doesn't look local. FORCE=1 to override."; exit 1; } ;;
 esac
 
-helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+# grafana-community hosts the maintained tempo-distributed chart (the single-binary
+# grafana/tempo chart is deprecated). open-telemetry hosts the demo + collector charts.
+helm repo add grafana-community https://grafana-community.github.io/helm-charts >/dev/null 2>&1 || true
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
 helm repo update >/dev/null
 
-echo "==> Tempo (traces backend)"
-helm upgrade --install tempo grafana/tempo -n "$NS" --wait --timeout 6m
+echo "==> Tempo (microservices mode, tempo-distributed)"
+helm upgrade --install tempo grafana-community/tempo-distributed -n "$NS" \
+  -f "$ROOT/workloads/otel-demo/tempo-distributed-values.yaml" --wait --timeout 8m
 
 echo "==> OTel Collector (config from collector/otelcol-config.yaml)"
 kubectl create configmap otelcol-config -n "$NS" \
