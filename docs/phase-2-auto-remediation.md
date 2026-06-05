@@ -46,11 +46,15 @@ flagd feature flag injects a fault  ──▶  OTel Demo errors / latency climb
 - **Auditable:** every decision emits a metric and writes an incident record.
 
 **Build order (each step leaves the repo committable):**
-1. `remediator` skeleton — Alertmanager webhook receiver, `/healthz`, `/metrics`, OTel
+1. ✅ `remediator` skeleton — Alertmanager webhook receiver, `/healthz`, `/metrics`, OTel
    traced, structured logs. *Observe-only:* log + count alerts, take no action yet.
-2. Wire the SLO alert → Alertmanager → remediator (kube-prometheus-stack AlertmanagerConfig).
-3. The first **bounded action** (see decision below), behind a dry-run flag.
-4. The **RCA copilot**: incident-window evidence pull + vendor-agnostic LLM + corpus RAG.
-5. Chaos demo: one `flagd` flip drives the whole loop unattended.
+2. ✅ Wire the SLO alert → Alertmanager → remediator (AlertmanagerConfig; matcher
+   strategy `None` for cross-namespace routing — [INC-2026-0006](../incidents/)).
+3. ✅ The **bounded action**: disable the offending flagd flag (dry-run toggle, cooldown,
+   idempotent, least-privilege RBAC). flagd repointed to watch the ConfigMap so a patch
+   reloads live — [INC-2026-0007](../incidents/). **Validated hands-off on-cluster:**
+   `productCatalogFailure` → SLO alert → remediator → flag off → heal.
+4. ⏳ The **RCA copilot**: incident-window evidence pull + vendor-agnostic LLM + corpus RAG.
+5. ⏳ Chaos demo: one `flagd` flip drives the whole loop unattended.
 
 > Open decisions are tracked at the top of the relevant step as we reach it.
