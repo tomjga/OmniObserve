@@ -1,62 +1,42 @@
 # Real workload: OpenTelemetry Demo
 
-Adds a **real, distributed, OTel-native** application as a system under observation,
-so the LGTM stack (and Phase 2's RCA copilot) work on real traces/metrics/logs
-instead of synthetic data. The demo also ships **built-in fault injection** (flagd
-feature flags), which makes the auto-remediation story real rather than simulated.
+Adds a **real, distributed, OTel-native** application as a system under observation, so
+the LGTM stack (and Phase 2's RCA copilot) work on real traces/metrics/logs instead of
+synthetic data. The demo also ships **built-in fault injection** (flagd feature flags),
+which makes the auto-remediation story real rather than simulated.
 
-> Do this **after** the core demo (`bootstrap.sh`) is validated. It is resource-heavy
-> (~20 pods) — give Rancher Desktop ≥ 6 GB / 4 CPU.
+> Run **after** `bootstrap.sh`. It's resource-heavy (~15–20 pods) — give Rancher Desktop
+> ≥ 6 GB / 4 CPU.
 
-## 1. Telemetry backends (traces, logs, collector)
-
-The core bootstrap only installs Prometheus. Add Tempo, Loki, and the collector so
-the demo's traces/logs land somewhere:
+## Deploy
 
 ```bash
-helm repo add grafana https://grafana.github.io/helm-charts
-helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-helm repo update
-
-# Traces
-helm upgrade --install tempo grafana/tempo -n monitoring
-
-# Logs (single-binary is fine for local)
-helm upgrade --install loki grafana/loki -n monitoring \
-  --set deploymentMode=SingleBinary --set loki.commonConfig.replication_factor=1 \
-  --set loki.storage.type=filesystem --set singleBinary.replicas=1 \
-  --set 'loki.auth_enabled=false'
-
-# Collector — fullnameOverride 'otelcol' so the Service matches our configs.
-# Supply OmniObserve's config (collector/otelcol-config.yaml) as the chart's config:
-helm upgrade --install otelcol open-telemetry/opentelemetry-collector -n monitoring \
-  --set mode=deployment --set fullnameOverride=otelcol \
-  --set image.repository=otel/opentelemetry-collector-contrib \
-  -f <(yq '{"config": load("../../collector/otelcol-config.yaml")}' 2>/dev/null \
-       || python3 -c "import yaml,sys;print(yaml.safe_dump({'config':yaml.safe_load(open('../../collector/otelcol-config.yaml'))}))")
+./bootstrap-telemetry.sh
 ```
 
-If the last command's inline config trick doesn't fit your tooling, copy
-`collector/otelcol-config.yaml` under a `config:` key into a values file and pass it
-with `-f`.
+That installs **Tempo** in microservices mode
+([`tempo-distributed`](tempo-distributed-values.yaml), from the maintained
+`grafana-community` repo — the single-binary `grafana/tempo` chart is deprecated), the
+**OTel Collector** (using
+[`collector/otelcol-config.yaml`](../../collector/otelcol-config.yaml) via a ConfigMap),
+a **Grafana Tempo datasource** (query-frontend on `:3200`), and the **OpenTelemetry
+Demo** wired to our collector.
 
-## 2. The demo app
+[`values.yaml`](values.yaml) disables the demo's bundled observability and points every
+service's `OTEL_EXPORTER_OTLP_ENDPOINT` at `otelcol.monitoring.svc.cluster.local:4317`.
 
-```bash
-helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
-  -n otel-demo --create-namespace -f values.yaml
-```
+> Verify the chart's value keys against your version first — subchart toggle names shift
+> between releases: `helm show values open-telemetry/opentelemetry-demo | less`.
 
-`values.yaml` disables the demo's bundled observability and points every service's
-`OTEL_EXPORTER_OTLP_ENDPOINT` at our collector.
+## Verify
 
-## 3. Verify
+- **Grafana → Explore → Tempo**: traces spanning `frontend → cartservice → …`.
+- **Prometheus**: the demo's metrics arrive via the collector's remote-write.
+- **flagd** feature flags inject faults (e.g. `cartServiceFailure`,
+  `paymentServiceUnreachable`) — the realistic regression source for Phase 2.
 
-- Grafana → Explore → **Tempo**: traces spanning frontend → cartservice → … should appear.
-- Grafana → Explore → **Loki**: structured logs from the demo services.
-- The demo's **flagd** feature flags inject faults (e.g. `cartServiceFailure`,
-  `paymentServiceUnreachable`) — flip one and watch the error signal propagate. This is
-  the realistic regression source for the auto-remediation work in Phase 2.
+> Logs (Loki) are left out of the first pass to keep it robust; the collector's logs
+> pipeline will log export errors until Loki is added — traces + metrics flow regardless.
 
-> Next: once this is solid, the same pattern (instrument → export OTLP to `otelcol`)
-> is how the personal **Dashboard** project plugs in as the flagship owned workload.
+> Next: the same pattern (instrument → export OTLP to `otelcol`) is how the personal
+> **Dashboard** project plugs in as the flagship owned workload.

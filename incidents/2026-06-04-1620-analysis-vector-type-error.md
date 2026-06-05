@@ -2,6 +2,7 @@
 id: INC-2026-0002
 title: Canary analysis errors with "mismatched types []float64 and float64"
 date: 2026-06-04
+occurred: 2026-06-04T16:20:00-06:00
 severity: SEV4
 status: resolved
 services: [api-service]
