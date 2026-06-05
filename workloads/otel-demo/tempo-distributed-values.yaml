@@ -17,9 +17,13 @@ traces:
     http:
       enabled: true
 
-# One replica per component — no HA needed locally.
+# One replica per component — no HA needed locally. With a single ingester the ring
+# replication factor MUST drop to 1, or the distributor rejects every write with
+# "at least 2 live replicas required" (the default RF=3 needs a 2-node quorum).
 ingester:
   replicas: 1
+  config:
+    replication_factor: 1
 distributor:
   replicas: 1
 querier:
