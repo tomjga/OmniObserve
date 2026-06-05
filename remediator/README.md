@@ -1,37 +1,58 @@
 # remediator — OmniObserve's control loop
 
-The service that turns alerts into **action**. It receives **Alertmanager** webhooks when
-an SLO burns and (in later steps) takes a bounded, auditable remediation — closing the
-loop from *"we can see the problem"* to *"the system handled it."* See
-[`docs/phase-2-auto-remediation.md`](../docs/phase-2-auto-remediation.md) for the full design.
+The service that turns alerts into **action** and **explanation**. It receives
+**Alertmanager** webhooks when an SLO burns, takes a bounded auto-remediation, and drafts
+a grounded RCA — closing the loop from *"we can see the problem"* to *"the system handled
+it, and here's why it happened."* See
+[`docs/phase-2-auto-remediation.md`](../docs/phase-2-auto-remediation.md) for the design.
 
-## Status: step 1 — observe-only
+## What it does
 
-This first cut **takes no action**. It validates the alert path end-to-end before the
-loop is given any power:
+- `POST /webhook` — parse an Alertmanager payload; log + count alerts
+  (`remediator_alerts_received_total`).
+- **Bounded action** — for a firing alert whose `remediation_flag` annotation names a flagd
+  flag, set that flag's `defaultVariant` to `off` in the flagd ConfigMap (flagd hot-reloads
+  and pushes to consumers — no restarts). Dry-run toggle, per-incident cooldown, idempotent,
+  least-privilege RBAC scoped to the one ConfigMap. Audited by `remediator_actions_total`.
+- **RCA copilot** — on a real remediation, asynchronously: gather Prometheus evidence,
+  retrieve relevant prior incidents from the baked-in corpus (`internal/corpus`), and ask a
+  **vendor-agnostic** LLM (`internal/llm`) for a structured RCA grounded in that material,
+  then publish to the configured sinks (`internal/sink`). Audited by
+  `remediator_rca_drafts_total`.
+- `GET /healthz`, `GET /metrics`; OpenTelemetry-traced as service `remediator` — the
+  platform observes its own control loop.
 
-- `POST /webhook` — parse an Alertmanager payload, log each alert, and count it
-  (`remediator_alerts_received_total{alertname,status}`).
-- `GET /healthz` — liveness + build version.
-- `GET /metrics` — Prometheus metrics.
+## Packages
 
-It is itself **OpenTelemetry-instrumented** (service `remediator`), so its decisions show
-up as traces next to the incidents it reacts to — the platform observes its own control loop.
+| Package | Role |
+|---|---|
+| `internal/llm` | OpenAI-compatible chat client — provider chosen by base URL + model + key |
+| `internal/corpus` | Loads `incidents/*.md`, retrieves precedent by tag/keyword overlap (no embeddings) |
+| `internal/evidence` | Prometheus instant queries (gRPC + HTTP RED metrics) per service |
+| `internal/rca` | The copilot: evidence + precedent + alert → grounded RCA prompt → LLM |
+| `internal/sink` | Grafana annotation, GitHub issue, GitHub corpus-draft sinks (best-effort, config-gated) |
 
-## Next steps (see the design doc)
+## Enabling the RCA copilot (needs an LLM key)
 
-2. Wire the SLO alert → Alertmanager → this webhook.
-3. First bounded action: **disable the offending feature flag** (flagd kill switch),
-   behind a dry-run flag, idempotent per `incident_key`, rate-limited.
-4. RCA copilot: pull the incident window's traces/metrics → vendor-agnostic LLM
-   ([[vendor-agnostic-llm]]) → grounded RCA → incident file + GitHub issue + Grafana annotation.
+Without an LLM key the loop is **action-only** (the copilot logs `enabled:false`). To turn
+it on, set the non-secret config in the chart and provide the secret:
+
+```bash
+# 1) non-secret: pick any OpenAI-compatible endpoint + model (vendor-agnostic)
+helm upgrade remediator deploy/remediator -n monitoring --reuse-values \
+  --set rca.llm.baseURL=https://generativelanguage.googleapis.com/v1beta/openai \
+  --set rca.llm.model=gemini-2.0-flash \
+  --set rca.github.repo=tomjga/OmniObserve
+
+# 2) secret (gitignored): cp the example, fill keys, apply
+cp deploy/remediator/rca-secret.example.yaml deploy/remediator/rca-secret.yaml
+#   edit LLM_API_KEY (+ optional GRAFANA_TOKEN / GITHUB_TOKEN), then:
+kubectl -n monitoring apply -f deploy/remediator/rca-secret.yaml
+```
 
 ## Run locally
 
 ```bash
 go test -race ./...
-go run .            # listens on :8080
-# simulate an alert:
-curl -XPOST localhost:8080/webhook -H 'content-type: application/json' \
-  -d '{"status":"firing","alerts":[{"status":"firing","labels":{"alertname":"HighErrorRate","service":"cart","severity":"critical"},"annotations":{"summary":"cart 5xx burning SLO"}}]}'
+go run .            # listens on :8080 (observe-only without a cluster)
 ```

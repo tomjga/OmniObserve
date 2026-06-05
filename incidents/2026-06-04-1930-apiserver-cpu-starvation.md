@@ -6,7 +6,7 @@ occurred: 2026-06-04T19:30:00-06:00
 severity: SEV2
 status: resolved
 services: [kube-apiserver, opentelemetry-demo]
-detection: kubectl failing with "net/http: TLS handshake timeout" / "context deadline exceeded"; docker socket also down
+detection: 'kubectl failing with "net/http: TLS handshake timeout" / "context deadline exceeded"; docker socket also down'
 slo_impact: full local control-plane outage (pre-prod) — no kubectl, no scheduling
 tags: [capacity, cpu, control-plane, apiserver, resource-limits, load-generator, single-node]
 remediation:

@@ -54,7 +54,10 @@ flagd feature flag injects a fault  ──▶  OTel Demo errors / latency climb
    idempotent, least-privilege RBAC). flagd repointed to watch the ConfigMap so a patch
    reloads live — [INC-2026-0007](../incidents/). **Validated hands-off on-cluster:**
    `productCatalogFailure` → SLO alert → remediator → flag off → heal.
-4. ⏳ The **RCA copilot**: incident-window evidence pull + vendor-agnostic LLM + corpus RAG.
+4. ✅ The **RCA copilot**: on a remediation, gather Prometheus evidence + retrieve corpus
+   precedent (tag/keyword RAG) → vendor-agnostic LLM → grounded RCA → publish to a Grafana
+   annotation, a GitHub issue, and a committed corpus draft. Degrades to action-only with
+   no LLM key. (Live drafting needs an LLM API key; see [`remediator/`](../remediator/).)
 5. ⏳ Chaos demo: one `flagd` flip drives the whole loop unattended.
 
 > Open decisions are tracked at the top of the relevant step as we reach it.

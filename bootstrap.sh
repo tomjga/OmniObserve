@@ -62,8 +62,9 @@ helm upgrade --install api-service "$ROOT/deploy/api-service" -n "$NS" \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent
 
-echo "==> Build + deploy the remediator (control loop: Alertmanager webhook -> action)"
-docker build --build-arg VERSION="$VERSION" -t omniobserve-remediator:local "$ROOT/remediator"
+echo "==> Build + deploy the remediator (control loop: Alertmanager webhook -> action + RCA)"
+# Root context so the incident corpus is baked in for the RCA copilot.
+docker build -f "$ROOT/remediator/Dockerfile" --build-arg VERSION="$VERSION" -t omniobserve-remediator:local "$ROOT"
 helm upgrade --install remediator "$ROOT/deploy/remediator" -n "$NS" \
   --set image.repository=omniobserve-remediator \
   --set image.tag=local \

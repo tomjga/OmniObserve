@@ -1,0 +1,115 @@
+package main
+
+import (
+	"context"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/tomjga/OmniObserve/remediator/internal/corpus"
+	"github.com/tomjga/OmniObserve/remediator/internal/evidence"
+	"github.com/tomjga/OmniObserve/remediator/internal/llm"
+	"github.com/tomjga/OmniObserve/remediator/internal/rca"
+	"github.com/tomjga/OmniObserve/remediator/internal/sink"
+)
+
+// copilot drafts RCAs; publisher fans them to the configured sinks. Both are nil-safe:
+// when the LLM isn't configured the copilot is disabled and the whole RCA step is skipped.
+var (
+	copilot   *rca.Copilot
+	publisher *sink.Publisher
+)
+
+// rcaDraftsTotal is the audit metric for the copilot: did it draft, and did publishing
+// to each sink succeed?
+var rcaDraftsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "remediator_rca_drafts_total",
+		Help: "RCA copilot drafts, by outcome (drafted/error) and per-sink publish result.",
+	},
+	[]string{"result"},
+)
+
+func init() { prometheus.MustRegister(rcaDraftsTotal) }
+
+// initCopilot wires the RCA copilot from env: the vendor-agnostic LLM, the in-cluster
+// Prometheus, and the incident corpus baked into the image. Returns a disabled copilot
+// (Enabled()==false) when the LLM isn't configured, so the loop runs action-only.
+func initCopilot() (*rca.Copilot, *sink.Publisher) {
+	client := llm.New(os.Getenv("LLM_BASE_URL"), os.Getenv("LLM_MODEL"), os.Getenv("LLM_API_KEY"))
+
+	var prom *evidence.Prometheus
+	if u := os.Getenv("PROMETHEUS_URL"); u != "" {
+		prom = evidence.NewPrometheus(u)
+	}
+
+	incidents, err := corpus.Load(envStr("CORPUS_DIR", "/app/incidents"))
+	if err != nil {
+		logger.Warnw("could not load incident corpus; RCAs will be ungrounded", "error", err)
+	}
+
+	cp := rca.New(client, prom, incidents)
+	logger.Infow("rca copilot",
+		"enabled", cp.Enabled(), "corpus_size", len(incidents), "model", os.Getenv("LLM_MODEL"))
+
+	httpc := &http.Client{Timeout: 20 * time.Second}
+	pub := sink.NewPublisher(
+		sink.Grafana{URL: os.Getenv("GRAFANA_URL"), Token: os.Getenv("GRAFANA_TOKEN"), HTTP: httpc},
+		sink.GitHubIssue{Repo: os.Getenv("GITHUB_REPO"), Token: os.Getenv("GITHUB_TOKEN"), HTTP: httpc},
+		sink.GitHubCorpus{Repo: os.Getenv("GITHUB_REPO"), Token: os.Getenv("GITHUB_TOKEN"),
+			Branch: envStr("RCA_DRAFTS_BRANCH", "rca-drafts"), HTTP: httpc},
+	)
+	return cp, pub
+}
+
+var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// draftRCA runs the copilot for one incident and publishes the result. It is meant to run
+// in its own goroutine with a fresh context — the LLM call can take tens of seconds and
+// must not block the webhook response or be cancelled when it returns.
+func draftRCA(alert Alert, action string) {
+	if copilot == nil || !copilot.Enabled() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	inc := rca.Incident{
+		AlertName:   alert.alertName(),
+		Service:     alert.Labels["service"],
+		Summary:     alert.Annotations["summary"],
+		IncidentKey: alert.incidentKey(),
+		Action:      action,
+		StartsAt:    alert.StartsAt,
+	}
+
+	body, err := copilot.Draft(ctx, inc)
+	if err != nil {
+		logger.Errorw("rca draft failed", "incident_key", inc.IncidentKey, "error", err)
+		rcaDraftsTotal.WithLabelValues("error").Inc()
+		return
+	}
+	rcaDraftsTotal.WithLabelValues("drafted").Inc()
+	logger.Infow("rca drafted", "incident_key", inc.IncidentKey, "chars", len(body))
+
+	r := sink.RCA{
+		Title:    "[RCA] " + inc.AlertName + " on " + inc.Service,
+		Body:     body,
+		Service:  inc.Service,
+		Slug:     strings.Trim(slugRe.ReplaceAllString(strings.ToLower(inc.AlertName), "-"), "-"),
+		StartsAt: inc.StartsAt,
+	}
+	for _, res := range publisher.Publish(ctx, r) {
+		if res.Error != nil {
+			logger.Errorw("rca publish failed", "sink", res.Sink, "error", res.Error)
+			rcaDraftsTotal.WithLabelValues("publish_error").Inc()
+		} else {
+			logger.Infow("rca published", "sink", res.Sink, "incident_key", inc.IncidentKey)
+			rcaDraftsTotal.WithLabelValues("published").Inc()
+		}
+	}
+}
