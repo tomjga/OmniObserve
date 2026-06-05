@@ -1,0 +1,14 @@
+version: "2"
+
+# Same focused, high-signal linter set as api-service. The remediator will gain power
+# (mutating cluster state) in later steps; revisit adding gosec then, since its findings
+# become meaningful once we touch the Kubernetes API and feature-flag config.
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
