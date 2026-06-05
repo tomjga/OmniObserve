@@ -1,0 +1,51 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/tomjga/omniobserve-remediator
+  tag: "" # defaults to .Chart.appVersion
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+otel:
+  # OTEL_EXPORTER_OTLP_ENDPOINT for the OTel SDK (OTLP/gRPC, insecure in-cluster).
+  endpoint: "http://otelcol:4317"
+
+serviceMonitor:
+  # Requires the Prometheus Operator. jobLabel makes Prometheus emit job="remediator".
+  enabled: true
+  interval: 15s
+
+alerting:
+  # Render an AlertmanagerConfig that routes opt-in alerts to this webhook. Alerts opt
+  # in by carrying the matchLabel set to "true" (see the api-service PrometheusRule).
+  enabled: true
+  matchLabel: omniobserve_remediate
+
+# The bounded action: disable a flagd feature flag named in the alert's
+# remediation_flag annotation. flagd lives in another namespace, so we render a
+# ServiceAccount + a Role/RoleBinding (in flagd.namespace) scoped to that one ConfigMap.
+flagd:
+  namespace: otel-demo
+  configMap: flagd-config
+  configKey: demo.flagd.json
+
+# dryRun=false makes the loop actually heal (disabling a fault flag is the safest
+# possible mutation — reversible, scoped). Set true to observe what it WOULD do.
+dryRun: false
+# Per-incident cooldown: don't act twice on the same incident within this window.
+cooldownSeconds: 300
+
+rbac:
+  # Create the ServiceAccount + Role/RoleBinding that let the remediator patch flagd.
+  create: true
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

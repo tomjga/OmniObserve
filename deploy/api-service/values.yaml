@@ -19,6 +19,14 @@ serviceMonitor:
   enabled: true
   interval: 15s
 
+alerts:
+  # A PrometheusRule whose error-rate alert opts into auto-remediation by carrying
+  # the remediateLabel — the remediator's AlertmanagerConfig routes on it.
+  enabled: true
+  errorRatioThreshold: 0.1 # fire when 5xx ratio exceeds 10%
+  for: 1m
+  remediateLabel: omniobserve_remediate
+
 rollout:
   # When true, render an Argo Rollout (canary) instead of a Deployment.
   # Requires the Argo Rollouts controller + CRDs (see ../../argo-rollouts/).

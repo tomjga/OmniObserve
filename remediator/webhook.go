@@ -46,3 +46,10 @@ func (a Alert) incidentKey() string {
 	}
 	return a.alertName() + "|" + svc
 }
+
+// remediationFlag is the flagd flag this alert asks the remediator to disable, carried
+// as an annotation. Empty means "no flag action for this alert" — the remediator only
+// acts when an alert explicitly opts in by naming the flag, never by guessing.
+func (a Alert) remediationFlag() string {
+	return a.Annotations["remediation_flag"]
+}
