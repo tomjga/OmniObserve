@@ -103,5 +103,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
-      - run: helm lint deploy/api-service
+      - run: helm lint deploy/api-service deploy/remediator
       - run: helm template api-service deploy/api-service > /dev/null
+      - run: helm template remediator deploy/remediator > /dev/null

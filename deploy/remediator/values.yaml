@@ -1,0 +1,33 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/tomjga/omniobserve-remediator
+  tag: "" # defaults to .Chart.appVersion
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+otel:
+  # OTEL_EXPORTER_OTLP_ENDPOINT for the OTel SDK (OTLP/gRPC, insecure in-cluster).
+  endpoint: "http://otelcol:4317"
+
+serviceMonitor:
+  # Requires the Prometheus Operator. jobLabel makes Prometheus emit job="remediator".
+  enabled: true
+  interval: 15s
+
+alerting:
+  # Render an AlertmanagerConfig that routes opt-in alerts to this webhook. Alerts opt
+  # in by carrying the matchLabel set to "true" (see the api-service PrometheusRule).
+  enabled: true
+  matchLabel: omniobserve_remediate
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

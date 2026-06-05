@@ -1,0 +1,33 @@
+{{- if .Values.alerts.enabled }}
+# Error-rate alert for api-service. Carries omniobserve_remediate="true" so the
+# remediator's AlertmanagerConfig routes it to the control loop (and, via continue:true,
+# to the usual receivers too). The PromQL is defensively written — the same lessons as
+# the rollout gate: clamp_min avoids divide-by-zero, "or vector(0)" keeps the no-traffic
+# case at 0 instead of NaN (see incidents/ INC-2026-0001).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "api-service.fullname" . }}
+  labels:
+    {{- include "api-service.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: api-service.slo
+      rules:
+        - alert: ApiServiceHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="api-service", code=~"5.."}[2m]))
+              /
+              clamp_min(sum(rate(http_requests_total{job="api-service"}[2m])), 1)
+            ) or vector(0)
+            > {{ .Values.alerts.errorRatioThreshold }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+            service: api-service
+            {{ .Values.alerts.remediateLabel }}: "true"
+          annotations:
+            summary: "api-service 5xx ratio above {{ .Values.alerts.errorRatioThreshold }}"
+            description: "5xx error ratio for api-service has exceeded {{ .Values.alerts.errorRatioThreshold }} for {{ .Values.alerts.for }}."
+{{- end }}
