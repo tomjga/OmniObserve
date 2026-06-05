@@ -2,6 +2,7 @@
 id: INC-2026-0005
 title: kube-apiserver unreachable (TLS handshake timeout) under CPU starvation
 date: 2026-06-04
+occurred: 2026-06-04T19:30:00-06:00
 severity: SEV2
 status: resolved
 services: [kube-apiserver, opentelemetry-demo]

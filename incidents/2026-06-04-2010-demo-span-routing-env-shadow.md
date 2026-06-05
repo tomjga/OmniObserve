@@ -2,6 +2,7 @@
 id: INC-2026-0004
 title: OTel Demo spans silently dropped — env override shadowed by component-level value
 date: 2026-06-04
+occurred: 2026-06-04T20:10:00-06:00
 severity: SEV3
 status: resolved
 services: [opentelemetry-demo, otel-collector]

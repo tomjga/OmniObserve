@@ -2,6 +2,7 @@
 id: INC-2026-0003
 title: Tempo rejected every trace write — "at least 2 live replicas required"
 date: 2026-06-04
+occurred: 2026-06-04T20:00:00-06:00
 severity: SEV3
 status: resolved
 services: [tempo, otel-collector]
