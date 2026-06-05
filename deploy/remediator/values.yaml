@@ -42,6 +42,22 @@ rbac:
   # Create the ServiceAccount + Role/RoleBinding that let the remediator patch flagd.
   create: true
 
+# RCA copilot: on a remediation, draft a grounded RCA and publish it. All non-secret
+# config is here; secrets (LLM_API_KEY, GRAFANA_TOKEN, GITHUB_TOKEN) come from an existing
+# Secret named below — NOT created by this chart and NOT committed. See rca-secret.example.yaml.
+# The copilot degrades gracefully: with no LLM key it stays disabled and the loop is action-only.
+rca:
+  enabled: true
+  secretName: remediator-rca
+  llm:
+    baseURL: "" # e.g. https://generativelanguage.googleapis.com/v1beta/openai (vendor-agnostic)
+    model: "" # e.g. gemini-2.0-flash, gpt-4o, llama3.1
+  prometheusURL: "http://kps-kube-prometheus-stack-prometheus.monitoring:9090"
+  grafanaURL: "http://kps-grafana.monitoring"
+  github:
+    repo: "" # owner/name — where RCA issues + corpus drafts land
+    draftsBranch: "rca-drafts"
+
 resources:
   requests:
     cpu: 25m

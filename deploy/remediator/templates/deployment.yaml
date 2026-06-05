@@ -42,6 +42,42 @@ spec:
               value: {{ .Values.flagd.configKey | quote }}
             - name: REMEDIATOR_COOLDOWN_SECONDS
               value: {{ .Values.cooldownSeconds | quote }}
+            {{- if .Values.rca.enabled }}
+            # RCA copilot — non-secret config from values, secrets from .Values.rca.secretName
+            # (optional: missing keys just leave the copilot/sinks disabled).
+            - name: LLM_BASE_URL
+              value: {{ .Values.rca.llm.baseURL | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.rca.llm.model | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.rca.prometheusURL | quote }}
+            - name: GRAFANA_URL
+              value: {{ .Values.rca.grafanaURL | quote }}
+            - name: GITHUB_REPO
+              value: {{ .Values.rca.github.repo | quote }}
+            - name: RCA_DRAFTS_BRANCH
+              value: {{ .Values.rca.github.draftsBranch | quote }}
+            - name: CORPUS_DIR
+              value: /app/incidents
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rca.secretName }}
+                  key: LLM_API_KEY
+                  optional: true
+            - name: GRAFANA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rca.secretName }}
+                  key: GRAFANA_TOKEN
+                  optional: true
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rca.secretName }}
+                  key: GITHUB_TOKEN
+                  optional: true
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
