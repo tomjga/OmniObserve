@@ -44,6 +44,9 @@ kubectl rollout restart deployment/otelcol -n "$NS" >/dev/null 2>&1 || true
 echo "==> Grafana Tempo datasource"
 kubectl apply -f "$ROOT/workloads/otel-demo/grafana-tempo-datasource.yaml"
 
+echo "==> Demo SLO alert (feeds the remediator control loop)"
+kubectl apply -f "$ROOT/workloads/otel-demo/prometheus-rules.yaml"
+
 echo "==> OpenTelemetry Demo (real workload -> our collector)"
 helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
   -n otel-demo --create-namespace -f "$ROOT/workloads/otel-demo/values.yaml" \

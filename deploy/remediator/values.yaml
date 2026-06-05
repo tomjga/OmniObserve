@@ -24,6 +24,24 @@ alerting:
   enabled: true
   matchLabel: omniobserve_remediate
 
+# The bounded action: disable a flagd feature flag named in the alert's
+# remediation_flag annotation. flagd lives in another namespace, so we render a
+# ServiceAccount + a Role/RoleBinding (in flagd.namespace) scoped to that one ConfigMap.
+flagd:
+  namespace: otel-demo
+  configMap: flagd-config
+  configKey: demo.flagd.json
+
+# dryRun=false makes the loop actually heal (disabling a fault flag is the safest
+# possible mutation — reversible, scoped). Set true to observe what it WOULD do.
+dryRun: false
+# Per-incident cooldown: don't act twice on the same incident within this window.
+cooldownSeconds: 300
+
+rbac:
+  # Create the ServiceAccount + Role/RoleBinding that let the remediator patch flagd.
+  create: true
+
 resources:
   requests:
     cpu: 25m

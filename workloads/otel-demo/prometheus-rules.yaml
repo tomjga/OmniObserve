@@ -1,0 +1,37 @@
+# SLO alert for an OTel Demo service, wired into the remediator control loop. When the
+# flagd flag named in remediation_flag is flipped on, this service's gRPC error ratio
+# climbs, the alert fires, Alertmanager routes it (omniobserve_remediate="true") to the
+# remediator, and the remediator disables that flag — auto-healing the fault.
+#
+# We alert on the ad service: adFailure is a *full* failure (a clean, high error ratio),
+# and `ad` emits rpc_server_duration metrics with a gRPC status code we can read.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otel-demo-slo
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: omniobserve
+    role: alert-rules
+spec:
+  groups:
+    - name: otel-demo.slo
+      rules:
+        - alert: AdServiceHighErrorRate
+          expr: |
+            (
+              sum(rate(rpc_server_duration_milliseconds_count{job="ad", rpc_grpc_status_code!="0"}[2m]))
+              /
+              clamp_min(sum(rate(rpc_server_duration_milliseconds_count{job="ad"}[2m])), 1)
+            ) or vector(0)
+            > 0.10
+          for: 1m
+          labels:
+            severity: critical
+            service: ad
+            omniobserve_remediate: "true"
+          annotations:
+            summary: "ad service gRPC error ratio above 10%"
+            description: "The ad service is returning gRPC errors — likely the adFailure feature flag."
+            # The remediator disables this flagd flag to stop the bleeding.
+            remediation_flag: adFailure

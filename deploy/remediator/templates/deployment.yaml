@@ -14,6 +14,9 @@ spec:
       labels:
         {{- include "remediator.selectorLabels" . | nindent 8 }}
     spec:
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ include "remediator.fullname" . }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -29,6 +32,16 @@ spec:
           env:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otel.endpoint | quote }}
+            - name: REMEDIATOR_DRY_RUN
+              value: {{ .Values.dryRun | quote }}
+            - name: FLAGD_NAMESPACE
+              value: {{ .Values.flagd.namespace | quote }}
+            - name: FLAGD_CONFIGMAP
+              value: {{ .Values.flagd.configMap | quote }}
+            - name: FLAGD_CONFIG_KEY
+              value: {{ .Values.flagd.configKey | quote }}
+            - name: REMEDIATOR_COOLDOWN_SECONDS
+              value: {{ .Values.cooldownSeconds | quote }}
           livenessProbe:
             httpGet:
               path: /healthz
