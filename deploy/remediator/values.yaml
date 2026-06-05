@@ -55,7 +55,7 @@ rca:
   prometheusURL: "http://kps-kube-prometheus-stack-prometheus.monitoring:9090"
   grafanaURL: "http://kps-grafana.monitoring"
   github:
-    repo: "" # owner/name — where RCA issues + corpus drafts land
+    repo: "tomjga/OmniObserve" # owner/name — where RCA issues + corpus drafts land (needs GITHUB_TOKEN)
     draftsBranch: "rca-drafts"
 
 resources:

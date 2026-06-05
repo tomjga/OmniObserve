@@ -23,6 +23,7 @@ type RCA struct {
 	Body     string // markdown
 	Service  string
 	Slug     string // filename-safe identifier, e.g. productcataloghigherrorrate
+	Model    string // the LLM that drafted this, e.g. gemini-2.5-flash — surfaced as a tag/label
 	StartsAt time.Time
 }
 
@@ -53,9 +54,13 @@ func (g Grafana) Publish(ctx context.Context, r RCA) error {
 	if at.IsZero() {
 		at = time.Now()
 	}
+	tags := []string{"omniobserve", "rca", r.Service}
+	if r.Model != "" {
+		tags = append(tags, "llm:"+r.Model)
+	}
 	body, _ := json.Marshal(map[string]any{
 		"time": at.UnixMilli(),
-		"tags": []string{"omniobserve", "rca", r.Service},
+		"tags": tags,
 		"text": r.Title + "\n\n" + r.Body,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.URL+"/api/annotations", bytes.NewReader(body))
@@ -77,10 +82,14 @@ type GitHubIssue struct {
 func (g GitHubIssue) Configured() bool { return g.Repo != "" && g.Token != "" }
 
 func (g GitHubIssue) Publish(ctx context.Context, r RCA) error {
+	labels := []string{"rca", "automated"}
+	if r.Model != "" {
+		labels = append(labels, "llm:"+r.Model) // GitHub creates the label on first use
+	}
 	body, _ := json.Marshal(map[string]any{
 		"title":  r.Title,
 		"body":   r.Body,
-		"labels": []string{"rca", "automated"},
+		"labels": labels,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		"https://api.github.com/repos/"+g.Repo+"/issues", bytes.NewReader(body))

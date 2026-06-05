@@ -89,4 +89,8 @@ func TestDraft_BuildsGroundedPromptAndReturnsRCA(t *testing.T) {
 	if !strings.Contains(prompt, "disabled flagd flag productCatalogFailure") {
 		t.Error("prompt did not include the action the remediator took")
 	}
+	// The system topology must be in the prompt so the model reasons about connectivity.
+	if !strings.Contains(prompt, "System architecture") || !strings.Contains(prompt, "flagd feature flags") {
+		t.Error("prompt did not include the system architecture / topology context")
+	}
 }

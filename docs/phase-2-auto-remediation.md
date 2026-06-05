@@ -55,9 +55,15 @@ flagd feature flag injects a fault  ──▶  OTel Demo errors / latency climb
    reloads live — [INC-2026-0007](../incidents/). **Validated hands-off on-cluster:**
    `productCatalogFailure` → SLO alert → remediator → flag off → heal.
 4. ✅ The **RCA copilot**: on a remediation, gather Prometheus evidence + retrieve corpus
-   precedent (tag/keyword RAG) → vendor-agnostic LLM → grounded RCA → publish to a Grafana
-   annotation, a GitHub issue, and a committed corpus draft. Degrades to action-only with
-   no LLM key. (Live drafting needs an LLM API key; see [`remediator/`](../remediator/).)
-5. ⏳ Chaos demo: one `flagd` flip drives the whole loop unattended.
+   precedent (tag/keyword RAG) + a **system-topology brief** (so the model reasons about
+   connectivity and distinguishes a test-injected flag from a real defect) → vendor-agnostic
+   LLM → grounded RCA with a **Proposed remediation** section → publish to a Grafana
+   annotation, a GitHub issue, and a committed corpus draft, each **attributed to the drafting
+   model** (`llm:<model>` tag/label + footer). Degrades to action-only with no LLM key.
+   **Validated live with `gemini-2.5-flash`.** (See [`remediator/`](../remediator/).)
+5. ✅ Chaos demo: one `flagd` flip drives the whole loop unattended
+   ([`demo/chaos.sh`](../demo/chaos.sh)). **Validated end-to-end:** `productCatalogFailure`
+   on → SLO alert → remediator heals (~130s) → Gemini drafts a ~2.5k-char RCA grounded in
+   the 7-incident corpus, all with no human in the loop.
 
 > Open decisions are tracked at the top of the relevant step as we reach it.
