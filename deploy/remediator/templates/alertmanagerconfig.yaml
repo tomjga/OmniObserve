@@ -1,0 +1,28 @@
+{{- if .Values.alerting.enabled }}
+# Routes alerts labelled omniobserve_remediate="true" to the remediator's webhook.
+# The Prometheus Operator adopts this (the Alertmanager's configSelector is {} = all)
+# and grafts the route under the main tree. continue:true means the alert ALSO reaches
+# the default receiver — the remediator acts, humans still get paged.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: {{ include "remediator.fullname" . }}
+  labels:
+    {{- include "remediator.labels" . | nindent 4 }}
+spec:
+  route:
+    receiver: {{ include "remediator.fullname" . }}
+    groupBy: ["alertname", "service"]
+    groupWait: 10s
+    groupInterval: 1m
+    repeatInterval: 5m
+    continue: true
+    matchers:
+      - name: {{ .Values.alerting.matchLabel }}
+        value: "true"
+  receivers:
+    - name: {{ include "remediator.fullname" . }}
+      webhookConfigs:
+        - url: http://{{ include "remediator.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/webhook
+          sendResolved: true
+{{- end }}

@@ -1,0 +1,39 @@
+{{- if .Values.rbac.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "remediator.fullname" . }}
+  labels:
+    {{- include "remediator.labels" . | nindent 4 }}
+---
+# Scoped to flagd's namespace and to the single flagd ConfigMap — the remediator can
+# read and update *only* that object, nothing else. Least privilege for a control loop.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "remediator.fullname" . }}-flagd
+  namespace: {{ .Values.flagd.namespace }}
+  labels:
+    {{- include "remediator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["{{ .Values.flagd.configMap }}"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "remediator.fullname" . }}-flagd
+  namespace: {{ .Values.flagd.namespace }}
+  labels:
+    {{- include "remediator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "remediator.fullname" . }}-flagd
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "remediator.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

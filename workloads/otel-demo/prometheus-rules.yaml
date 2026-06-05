@@ -1,0 +1,38 @@
+# SLO alert for an OTel Demo service, wired into the remediator control loop. When the
+# flagd flag named in remediation_flag is on, this service's gRPC error ratio climbs, the
+# alert fires, Alertmanager routes it (omniobserve_remediate="true") to the remediator,
+# and the remediator disables that flag in the flagd ConfigMap — which flagd (watching the
+# ConfigMap, see bootstrap-telemetry.sh) hot-reloads and pushes to consumers, auto-healing.
+#
+# We alert on product-catalog: productCatalogFailure makes GetProduct throw Status.INTERNAL
+# (a clean gRPC error), and product-catalog emits rpc_server_duration with a status code.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otel-demo-slo
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: omniobserve
+    role: alert-rules
+spec:
+  groups:
+    - name: otel-demo.slo
+      rules:
+        - alert: ProductCatalogHighErrorRate
+          expr: |
+            (
+              sum(rate(rpc_server_duration_milliseconds_count{job="product-catalog", rpc_grpc_status_code!="0"}[2m]))
+              /
+              clamp_min(sum(rate(rpc_server_duration_milliseconds_count{job="product-catalog"}[2m])), 1)
+            ) or vector(0)
+            > 0.05
+          for: 1m
+          labels:
+            severity: critical
+            service: product-catalog
+            omniobserve_remediate: "true"
+          annotations:
+            summary: "product-catalog gRPC error ratio above 5%"
+            description: "product-catalog is returning gRPC errors — likely the productCatalogFailure feature flag."
+            # The remediator disables this flagd flag to stop the bleeding.
+            remediation_flag: productCatalogFailure

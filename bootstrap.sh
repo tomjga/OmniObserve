@@ -39,7 +39,12 @@ helm upgrade --install kps prometheus-community/kube-prometheus-stack -n "$NS" \
   --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true \
   --set prometheus.prometheusSpec.retention=2h \
   --set prometheus.prometheusSpec.resources.requests.memory=400Mi \
+  --set alertmanager.alertmanagerSpec.alertmanagerConfigMatcherStrategy.type=None \
   --wait --timeout 12m
+# matcherStrategy=None: the operator otherwise injects a namespace= matcher into every
+# AlertmanagerConfig route, which would stop the cross-cutting remediator from receiving
+# alerts raised in other namespaces (e.g. the demo). We route on our explicit
+# omniobserve_remediate label instead — see deploy/remediator/templates/alertmanagerconfig.yaml.
 
 echo "==> Argo Rollouts controller"
 helm upgrade --install argo-rollouts argo/argo-rollouts -n argo-rollouts --create-namespace \
@@ -57,6 +62,13 @@ helm upgrade --install api-service "$ROOT/deploy/api-service" -n "$NS" \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent
 
+echo "==> Build + deploy the remediator (control loop: Alertmanager webhook -> action)"
+docker build --build-arg VERSION="$VERSION" -t omniobserve-remediator:local "$ROOT/remediator"
+helm upgrade --install remediator "$ROOT/deploy/remediator" -n "$NS" \
+  --set image.repository=omniobserve-remediator \
+  --set image.tag=local \
+  --set image.pullPolicy=IfNotPresent
+
 cat <<EOF
 
 ==> Done. The stack is up in namespace '$NS'.
@@ -67,6 +79,12 @@ Watch the rollout:
 Reach the service + Grafana (separate shells):
   kubectl -n $NS port-forward svc/api-service 8080:8080
   kubectl -n $NS port-forward svc/kps-grafana 3000:80   # admin / prom-operator
+
+See the remediator react to an SLO breach (Phase 2):
+  kubectl -n $NS logs deploy/remediator -f          # watch it receive alerts
+  # drive errors so ApiServiceHighErrorRate fires and routes to the webhook:
+  kubectl -n $NS run apierr --rm -it --restart=Never --image=curlimages/curl -- \
+    sh -c 'while true; do curl -s -o /dev/null "http://api-service:8080/kpi/errors?error_rate=100"; done'
 
 Run the auto-rollback demo: see demo/README.md
 EOF

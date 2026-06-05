@@ -29,11 +29,18 @@ default:
       value: otelcol.monitoring.svc.cluster.local
 
 components:
-  # The locust load generator hammers the frontend continuously; on this node it
-  # pegged the CPU hard enough to starve the kube-apiserver (TLS handshake timeouts).
-  # Phase 2 wants *deliberate* flagd faults + on-demand load, not constant traffic.
+  # Load generator: kept ON but turned WAY down. The default (10 users + headless
+  # browser traffic) pegged CPU and starved the kube-apiserver. At 3 users with browser
+  # traffic off it's a gentle, steady stream of real browse traffic — enough to keep
+  # demo traces flowing into Tempo without a storm. Phase 2 layers deliberate flagd
+  # faults on top of this baseline.
   load-generator:
-    enabled: false
+    enabled: true
+    envOverrides:
+      - name: LOCUST_USERS
+        value: "3"
+      - name: LOCUST_BROWSER_TRAFFIC_ENABLED
+        value: "false"
   # The demo's llm service runs a local model (heavy). We delegate LLM work to an
   # external, vendor-agnostic endpoint instead (see docs/phase-1.5-real-telemetry.md).
   llm:

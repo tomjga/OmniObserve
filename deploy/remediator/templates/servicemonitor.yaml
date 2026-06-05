@@ -1,0 +1,18 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "remediator.fullname" . }}
+  labels:
+    {{- include "remediator.labels" . | nindent 4 }}
+spec:
+  # jobLabel reads this label off the Service so Prometheus sets job="remediator".
+  jobLabel: app.kubernetes.io/name
+  selector:
+    matchLabels:
+      {{- include "remediator.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
