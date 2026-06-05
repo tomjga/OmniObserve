@@ -78,6 +78,11 @@ pip-wheel-metadata/
 .pytest_cache/
 .coverage
 
+# Go build artifacts (compiled service binaries + coverage)
+/remediator/remediator
+/application/go-kpi-monitor
+coverage.out
+
 ### HELM ###
 # Dependencies and releases
 charts/

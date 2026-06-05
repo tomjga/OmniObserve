@@ -17,15 +17,18 @@ jobs:
   test:
     name: Test & vet
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [application, remediator]
     defaults:
       run:
-        working-directory: application
+        working-directory: ${{ matrix.service }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: application/go.sum
+          cache-dependency-path: ${{ matrix.service }}/go.sum
       - run: go vet ./...
       - run: go build ./...
       - run: go test -race -coverprofile=coverage.out ./...
@@ -34,6 +37,9 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [application, remediator]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -42,14 +48,17 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
-          working-directory: application
+          working-directory: ${{ matrix.service }}
 
   govulncheck:
     name: Go vulnerabilities
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [application, remediator]
     defaults:
       run:
-        working-directory: application
+        working-directory: ${{ matrix.service }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
