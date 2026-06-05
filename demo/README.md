@@ -45,3 +45,41 @@ Stop the regression load (`Ctrl-C`) and the next rollout attempt promotes cleanl
 > The app is a KPI simulator, so the "bad release" is simulated via its `/kpi/errors`
 > knob. The control loop being demonstrated — SLO query → analysis fail → auto-rollback
 > — is exactly what a real regression would trigger.
+
+---
+
+# Demo: autonomous self-heal + RCA (Phase 2)
+
+The Phase 2 payoff in **one command**: a runtime fault (not a bad deploy) is injected,
+and the whole loop runs with no human in it — SLO burn → alert → the `remediator`
+disables the offending feature flag (heal) → the RCA copilot drafts a grounded analysis.
+
+## Prerequisites
+
+- The Phase 1.5 telemetry stack + OTel Demo deployed (`./bootstrap-telemetry.sh`)
+- The `remediator` installed (`./bootstrap.sh`), with flagd repointed to watch its
+  ConfigMap so a patch reloads live ([INC-2026-0007](../incidents/))
+- For the RCA: an LLM key wired (`rca.llm.*` + the `remediator-rca` Secret). Without it
+  the loop still heals — it just runs action-only. See [../remediator/](../remediator/).
+
+## Walkthrough
+
+```bash
+./demo/chaos.sh            # inject the fault, then watch the heal + RCA, with timing
+./demo/chaos.sh --status   # current flag state + recent remediator activity
+./demo/chaos.sh --reset    # force the flag back off (cleanup after an aborted run)
+```
+
+The script flips `productCatalogFailure` **on**, then polls until the remediator flips it
+back **off** (the heal), reports the time-to-heal, and surfaces this run's `remediation`
+and `rca drafted` log lines. The existing otel-demo load generator already drives the
+traffic, so nothing else is needed.
+
+**Validated run:** heal in ~130s (the alert's `for: 1m` + scrape interval + error-ratio
+build-up under low load), followed by a ~2.5k-char Gemini RCA grounded in the 7-incident
+corpus.
+
+> The RCA is *drafted* regardless, but is only **visible** where a sink is configured —
+> a Grafana annotation on the incident window, a GitHub issue, and a committed corpus
+> draft. With no sink the script reports `rca drafted (chars=N)` only. Enable the Grafana
+> sink (`GRAFANA_TOKEN` in the Secret) to read the full text on the timeline.
