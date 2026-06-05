@@ -111,6 +111,7 @@ func main() {
 	logger = zapLogger.Sugar()
 
 	flagRemediator = initRemediator()
+	copilot, publisher = initCopilot()
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -191,6 +192,12 @@ func remediate(ctx context.Context, span trace.Span, alert Alert) {
 		attribute.String("flag", flag),
 		attribute.String("outcome", result),
 	))
+
+	// When we actually disabled a flag (once per incident — repeats hit cooldown), draft
+	// a grounded RCA in the background. Async so the LLM call never blocks the webhook.
+	if outcome == OutcomeDisabled {
+		go draftRCA(alert, "disabled flagd flag "+flag)
+	}
 }
 
 // healthHandler reports liveness and the build version (same contract as api-service).
