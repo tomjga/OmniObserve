@@ -21,9 +21,10 @@ exporters:
   # Always-on local visibility: prints a summary of every batch to collector logs.
   debug:
     verbosity: normal
-  # Traces -> Tempo (OTLP/gRPC).
+  # Traces -> Tempo (OTLP/gRPC). In microservices mode the distributor is the
+  # ingest entrypoint, so we target tempo-distributor, not a single "tempo" svc.
   otlp/tempo:
-    endpoint: tempo:4317
+    endpoint: tempo-distributor:4317
     tls:
       insecure: true
   # Metrics -> kube-prometheus-stack Prometheus (needs enableRemoteWriteReceiver,

@@ -18,8 +18,23 @@ grafana:
 opensearch:
   enabled: false
 
-# Point every instrumented service at OmniObserve's collector.
+# Point every instrumented service at OmniObserve's collector. IMPORTANT: each service
+# re-declares OTEL_EXPORTER_OTLP_ENDPOINT=http://$(OTEL_COLLECTOR_NAME):4317 at the
+# COMPONENT level, which (being last in the env list) shadows any default-level
+# OTEL_EXPORTER_OTLP_ENDPOINT override. So we override OTEL_COLLECTOR_NAME instead —
+# the per-service endpoint interpolates from it and resolves to our collector.
 default:
   envOverrides:
-    - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: http://otelcol.monitoring.svc.cluster.local:4317
+    - name: OTEL_COLLECTOR_NAME
+      value: otelcol.monitoring.svc.cluster.local
+
+components:
+  # The locust load generator hammers the frontend continuously; on this node it
+  # pegged the CPU hard enough to starve the kube-apiserver (TLS handshake timeouts).
+  # Phase 2 wants *deliberate* flagd faults + on-demand load, not constant traffic.
+  load-generator:
+    enabled: false
+  # The demo's llm service runs a local model (heavy). We delegate LLM work to an
+  # external, vendor-agnostic endpoint instead (see docs/phase-1.5-real-telemetry.md).
+  llm:
+    enabled: false

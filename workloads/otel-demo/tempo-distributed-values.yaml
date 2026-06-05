@@ -1,0 +1,44 @@
+# Tempo in microservices mode (grafana-community/tempo-distributed), tuned for a
+# single-node local cluster. The single-binary grafana/tempo chart is deprecated;
+# this is the maintained successor. We keep the real microservices topology
+# (distributor/ingester/querier/query-frontend/compactor) for portfolio signal,
+# but pin every component to 1 replica and drop the optional pieces.
+#
+# Storage note: in microservices mode the ingester writes blocks and the querier
+# reads them, so they need SHARED object storage — that's why the bundled MinIO
+# stays enabled (filesystem-per-pod would never let queries find traces). Gateway
+# (NGINX) and metrics-generator are pure extras and are turned off to save pods.
+
+# OTLP ingest on the distributor (our collector exports to tempo-distributor:4317).
+traces:
+  otlp:
+    grpc:
+      enabled: true
+    http:
+      enabled: true
+
+# One replica per component — no HA needed locally. With a single ingester the ring
+# replication factor MUST drop to 1, or the distributor rejects every write with
+# "at least 2 live replicas required" (the default RF=3 needs a 2-node quorum).
+ingester:
+  replicas: 1
+  config:
+    replication_factor: 1
+distributor:
+  replicas: 1
+querier:
+  replicas: 1
+queryFrontend:
+  replicas: 1
+compactor:
+  replicas: 1
+
+# Shared object storage for the distributed components (kept; see note above).
+minio:
+  enabled: true
+
+# Optional components we don't need locally — fewer pods.
+gateway:
+  enabled: false
+metricsGenerator:
+  enabled: false

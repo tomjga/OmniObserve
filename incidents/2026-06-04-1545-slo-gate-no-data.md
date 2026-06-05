@@ -2,6 +2,7 @@
 id: INC-2026-0001
 title: Healthy canary auto-aborted by SLO gate (no-data treated as failure)
 date: 2026-06-04
+occurred: 2026-06-04T15:45:00-06:00
 severity: SEV4
 status: resolved
 services: [api-service]

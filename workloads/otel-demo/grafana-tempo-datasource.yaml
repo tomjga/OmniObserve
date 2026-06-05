@@ -1,0 +1,19 @@
+# kube-prometheus-stack's Grafana sidecar auto-imports ConfigMaps labelled
+# grafana_datasource=1. This adds Tempo so traces are explorable next to metrics.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-tempo-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  tempo-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Tempo
+        type: tempo
+        access: proxy
+        # tempo-distributed serves the query API from query-frontend on :3200.
+        url: http://tempo-query-frontend:3200
+        uid: tempo
