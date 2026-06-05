@@ -53,6 +53,17 @@ helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
   --wait --timeout 12m \
   || echo "    NOTE: demo install returned non-zero — check pods; chart value keys vary by version (helm show values open-telemetry/opentelemetry-demo)."
 
+echo "==> Point flagd at the ConfigMap directly (so the remediator's ConfigMap patch reloads live)"
+# By default flagd serves a writable copy that an init container seeds ONCE from the
+# ConfigMap, so ConfigMap edits never reach it. Mounting the ConfigMap where flagd watches
+# makes flagd hot-reload on edits and push to consumers over their open streams — no
+# restarts. This is what lets the remediator heal by patching the ConfigMap alone.
+kubectl -n otel-demo patch deploy flagd --type json -p '[
+  {"op":"replace","path":"/spec/template/spec/containers/0/volumeMounts/0/name","value":"config-ro"},
+  {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/0/readOnly","value":true}
+]' >/dev/null 2>&1 || echo "    NOTE: flagd patch skipped (check container/volumeMount layout for this demo version)."
+kubectl -n otel-demo rollout status deploy/flagd --timeout=120s >/dev/null 2>&1 || true
+
 cat <<EOF
 
 ==> Telemetry layer up. Verify in Grafana:
