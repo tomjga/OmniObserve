@@ -33,7 +33,7 @@ func newFakeRemediator(t *testing.T, defaultVariant string, dryRun bool, cooldow
 		ObjectMeta: metav1.ObjectMeta{Name: "flagd-config", Namespace: "otel-demo"},
 		Data:       map[string]string{"demo.flagd.json": flagdConfig(defaultVariant)},
 	}
-	cs := fake.NewSimpleClientset(cm)
+	cs := fake.NewClientset(cm)
 	return NewFlagRemediator(cs, "otel-demo", "flagd-config", "demo.flagd.json", dryRun, cooldown), cs
 }
 
