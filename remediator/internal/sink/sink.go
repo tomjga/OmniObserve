@@ -113,11 +113,10 @@ type GitHubCorpus struct {
 func (g GitHubCorpus) Configured() bool { return g.Repo != "" && g.Token != "" && g.Branch != "" }
 
 func (g GitHubCorpus) Publish(ctx context.Context, r RCA) error {
-	at := r.StartsAt
-	if at.IsZero() {
-		at = time.Now()
-	}
-	path := fmt.Sprintf("incidents/%s-%s-rca.md", at.UTC().Format("2006-01-02-1504"), r.Slug)
+	// Use the draft time (seconds precision) for the filename so each RCA is a NEW file.
+	// The alert StartsAt is sticky across a flapping incident, which collided here and made
+	// GitHub's contents API demand a sha to overwrite (422). A unique path always creates.
+	path := fmt.Sprintf("incidents/%s-%s-rca.md", time.Now().UTC().Format("2006-01-02-150405"), r.Slug)
 	body, _ := json.Marshal(map[string]any{
 		"message": "rca(auto): " + r.Title,
 		"content": base64.StdEncoding.EncodeToString([]byte(r.Body)),
