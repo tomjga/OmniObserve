@@ -19,6 +19,14 @@ spec:
         - name: otelcol
           image: otel/opentelemetry-collector-contrib:0.153.0 # bump as needed
           args: ["--config=/etc/otelcol/config.yaml"]
+          # Grafana Cloud OTLP credentials for the otlphttp/grafanacloud exporter. From the
+          # gitignored grafana-cloud-otlp Secret; bootstrap seeds a harmless placeholder when
+          # absent so the collector still runs (cloud exports just fail-and-retry, locally OK).
+          env:
+            - name: GRAFANA_CLOUD_OTLP_ENDPOINT
+              valueFrom: { secretKeyRef: { name: grafana-cloud-otlp, key: endpoint } }
+            - name: GRAFANA_CLOUD_OTLP_AUTH
+              valueFrom: { secretKeyRef: { name: grafana-cloud-otlp, key: authorization } }
           ports:
             - { name: otlp-grpc, containerPort: 4317 }
             - { name: otlp-http, containerPort: 4318 }

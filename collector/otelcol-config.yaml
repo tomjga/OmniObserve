@@ -36,18 +36,25 @@ exporters:
   # Logs -> Loki's native OTLP ingest endpoint (otlphttp appends /v1/logs).
   otlphttp/loki:
     endpoint: http://loki-gateway/otlp
+  # Grafana Cloud (managed, shareable) — same OTLP stream, second destination. One gateway
+  # ingests metrics+traces+logs. Endpoint + Basic auth come from the gitignored
+  # grafana-cloud-otlp Secret (see grafana-cloud-secret.example.yaml), injected as env.
+  otlphttp/grafanacloud:
+    endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:GRAFANA_CLOUD_OTLP_AUTH}
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/tempo, debug]
+      exporters: [otlp/tempo, otlphttp/grafanacloud, debug]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheusremotewrite, debug]
+      exporters: [prometheusremotewrite, otlphttp/grafanacloud, debug]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/loki, debug]
+      exporters: [otlphttp/loki, otlphttp/grafanacloud, debug]
