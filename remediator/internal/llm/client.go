@@ -62,39 +62,65 @@ type chatResponse struct {
 
 // Complete sends the messages and returns the assistant's reply text. temperature is
 // kept low (0.2) for RCA: we want grounded, repeatable analysis, not creativity.
+// Transient failures (network errors, 429, 5xx — e.g. a hosted model's brief "high demand"
+// 503) are retried with backoff, since losing an RCA to a momentary spike isn't acceptable.
 func (c *Client) Complete(ctx context.Context, messages []Message) (string, error) {
 	body, err := json.Marshal(chatRequest{Model: c.model, Messages: messages, Temperature: 0.2})
 	if err != nil {
 		return "", err
 	}
 
+	const attempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		out, retryable, err := c.tryComplete(ctx, body)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+		if !retryable || attempt == attempts {
+			break
+		}
+		// Backoff (2s, 4s), but never past the caller's deadline.
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(time.Duration(attempt*2) * time.Second):
+		}
+	}
+	return "", lastErr
+}
+
+// tryComplete makes one attempt; retryable reports whether a failure is worth retrying.
+func (c *Client) tryComplete(ctx context.Context, body []byte) (string, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", err
+		return "", true, err // network/timeout — retryable
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("llm http %d: %s", resp.StatusCode, string(raw))
+		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+		return "", retryable, fmt.Errorf("llm http %d: %s", resp.StatusCode, string(raw))
 	}
 
 	var parsed chatResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("decode llm response: %w", err)
+		return "", false, fmt.Errorf("decode llm response: %w", err)
 	}
 	if parsed.Error != nil {
-		return "", fmt.Errorf("llm error: %s", parsed.Error.Message)
+		return "", false, fmt.Errorf("llm error: %s", parsed.Error.Message)
 	}
 	if len(parsed.Choices) == 0 {
-		return "", fmt.Errorf("llm returned no choices")
+		return "", false, fmt.Errorf("llm returned no choices")
 	}
-	return parsed.Choices[0].Message.Content, nil
+	return parsed.Choices[0].Message.Content, false, nil
 }
