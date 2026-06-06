@@ -12,6 +12,7 @@ import (
 
 	"github.com/tomjga/OmniObserve/remediator/internal/corpus"
 	"github.com/tomjga/OmniObserve/remediator/internal/evidence"
+	"github.com/tomjga/OmniObserve/remediator/internal/knowledge"
 	"github.com/tomjga/OmniObserve/remediator/internal/llm"
 	"github.com/tomjga/OmniObserve/remediator/internal/rca"
 	"github.com/tomjga/OmniObserve/remediator/internal/sink"
@@ -52,12 +53,17 @@ func initCopilot() (*rca.Copilot, *sink.Publisher) {
 		logger.Warnw("could not load incident corpus; RCAs will be ungrounded", "error", err)
 	}
 
-	cp := rca.New(client, prom, incidents)
+	codebase, err := knowledge.Load(envStr("KNOWLEDGE_DIR", "/app/knowledge"))
+	if err != nil {
+		logger.Warnw("could not load codebase knowledge; remediations will be topology-only", "error", err)
+	}
+
+	cp := rca.New(client, prom, incidents, codebase)
 	if sc := os.Getenv("SYSTEM_CONTEXT"); sc != "" {
 		cp.SystemContext = sc // point the copilot at a different monitored system without a rebuild
 	}
 	logger.Infow("rca copilot",
-		"enabled", cp.Enabled(), "corpus_size", len(incidents), "model", os.Getenv("LLM_MODEL"))
+		"enabled", cp.Enabled(), "corpus_size", len(incidents), "codebase_size", len(codebase), "model", os.Getenv("LLM_MODEL"))
 
 	httpc := &http.Client{Timeout: 20 * time.Second}
 	pub := sink.NewPublisher(

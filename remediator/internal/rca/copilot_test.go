@@ -11,6 +11,7 @@ import (
 
 	"github.com/tomjga/OmniObserve/remediator/internal/corpus"
 	"github.com/tomjga/OmniObserve/remediator/internal/evidence"
+	"github.com/tomjga/OmniObserve/remediator/internal/knowledge"
 	"github.com/tomjga/OmniObserve/remediator/internal/llm"
 )
 
@@ -25,10 +26,10 @@ func TestTerms_SplitsCamelCase(t *testing.T) {
 }
 
 func TestEnabled(t *testing.T) {
-	if New(llm.New("", "", ""), nil, nil).Enabled() {
+	if New(llm.New("", "", ""), nil, nil, nil).Enabled() {
 		t.Error("unconfigured LLM should make the copilot disabled")
 	}
-	if !New(llm.New("u", "m", "k"), nil, nil).Enabled() {
+	if !New(llm.New("u", "m", "k"), nil, nil, nil).Enabled() {
 		t.Error("configured LLM should enable the copilot")
 	}
 }
@@ -65,7 +66,14 @@ func TestDraft_BuildsGroundedPromptAndReturnsRCA(t *testing.T) {
 		Body: "flagd served a seed-once copy.",
 	}}
 
-	cp := New(llm.New(llmSrv.URL, "m", "k"), evidence.NewPrometheus(prom.URL), incidents)
+	codebase := []knowledge.Entry{{
+		Service: "product-catalog", Title: "GetProduct fault path",
+		Files: []string{"src/product-catalog/main.go (GetProduct)"},
+		Flags: []string{"productCatalogFailure"},
+		Body:  "GetProduct returns codes.Internal when the flag is on; fix is to return NotFound for unknown ids.",
+	}}
+
+	cp := New(llm.New(llmSrv.URL, "m", "k"), evidence.NewPrometheus(prom.URL), incidents, codebase)
 	out, err := cp.Draft(context.Background(), Incident{
 		AlertName: "ProductCatalogHighErrorRate", Service: "product-catalog",
 		Summary: "product-catalog gRPC error ratio above 5%",
@@ -92,5 +100,10 @@ func TestDraft_BuildsGroundedPromptAndReturnsRCA(t *testing.T) {
 	// The system topology must be in the prompt so the model reasons about connectivity.
 	if !strings.Contains(prompt, "System architecture") || !strings.Contains(prompt, "flagd feature flags") {
 		t.Error("prompt did not include the system architecture / topology context")
+	}
+	// The codebase knowledge for the affected service must be in the prompt so the proposed
+	// remediation is grounded in the real source, not invented.
+	if !strings.Contains(prompt, "Codebase knowledge") || !strings.Contains(prompt, "src/product-catalog/main.go (GetProduct)") {
+		t.Error("prompt did not include the codebase knowledge for the service")
 	}
 }

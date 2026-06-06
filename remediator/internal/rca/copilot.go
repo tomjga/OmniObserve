@@ -14,6 +14,7 @@ import (
 
 	"github.com/tomjga/OmniObserve/remediator/internal/corpus"
 	"github.com/tomjga/OmniObserve/remediator/internal/evidence"
+	"github.com/tomjga/OmniObserve/remediator/internal/knowledge"
 	"github.com/tomjga/OmniObserve/remediator/internal/llm"
 )
 
@@ -32,6 +33,7 @@ type Copilot struct {
 	llm       *llm.Client
 	prom      *evidence.Prometheus
 	incidents []corpus.Incident
+	codebase  []knowledge.Entry
 	// SystemContext describes how the monitored system is wired (topology + signal flow), so
 	// the LLM can reason about cause and blast radius instead of guessing. Defaults to the
 	// OmniObserve topology; override it (e.g. via the SYSTEM_CONTEXT env) to point the same
@@ -39,8 +41,8 @@ type Copilot struct {
 	SystemContext string
 }
 
-func New(client *llm.Client, prom *evidence.Prometheus, incidents []corpus.Incident) *Copilot {
-	return &Copilot{llm: client, prom: prom, incidents: incidents, SystemContext: defaultSystemContext}
+func New(client *llm.Client, prom *evidence.Prometheus, incidents []corpus.Incident, codebase []knowledge.Entry) *Copilot {
+	return &Copilot{llm: client, prom: prom, incidents: incidents, codebase: codebase, SystemContext: defaultSystemContext}
 }
 
 // defaultSystemContext is the OmniObserve topology. In this environment faults are injected
@@ -73,6 +75,11 @@ func (c *Copilot) Draft(ctx context.Context, inc Incident) (string, error) {
 	precedent := corpus.Retrieve(c.incidents, terms(inc), 3)
 
 	user := userPrompt(inc, metrics, precedent)
+	// Codebase knowledge for the affected service: the real fault path + code-level fix, so
+	// the remediation the copilot proposes is grounded in the source, not invented.
+	if kb, ok := knowledge.Lookup(c.codebase, inc.Service); ok {
+		user = "# Codebase knowledge (the actual fault path in the source)\n" + kb.Render() + "\n\n" + user
+	}
 	if c.SystemContext != "" {
 		user = "# System architecture\n" + c.SystemContext + "\n\n" + user
 	}
@@ -84,20 +91,30 @@ func (c *Copilot) Draft(ctx context.Context, inc Incident) (string, error) {
 }
 
 const systemPrompt = `You are an SRE incident-analysis assistant for the OmniObserve platform.
-Write a concise root-cause analysis grounded STRICTLY in the system architecture, evidence,
-and prior incidents provided. Do not invent metrics, logs, or causes not supported by the
-material. If the evidence is thin, say so. Prefer the explanation most consistent with the
-described topology and the cited prior incidents. Output markdown with exactly these sections:
+Write a concise root-cause analysis grounded STRICTLY in the system architecture, codebase
+knowledge, evidence, and prior incidents provided. Do not invent metrics, logs, code, or
+causes not supported by the material. If the evidence is thin, say so. Prefer the explanation
+most consistent with the described topology and the cited prior incidents. Output markdown
+with exactly these sections:
 ## Summary
 ## Likely root cause
 ## Evidence considered
 ## Proposed remediation
+## Code-level fix
 ## Recommended follow-up
 ## Related prior incidents (cite their IDs)
 
 For "Proposed remediation", give the most direct fix and state plainly whether the trigger is
 a test-injected feature flag (the common case here — see the architecture) or a genuine code/
-config defect; if it is a real defect, describe the concrete change that would resolve it.`
+config defect.
+
+For "Code-level fix": when a "Codebase knowledge" section is provided, ground the fix in it —
+name the specific file and function from that section, explain the exact code path that emits
+the error, and give the concrete code-level change that would resolve the underlying defect
+(not merely toggling the flag). Quote/sketch the changed code where it helps. If no codebase
+knowledge is provided for the service, say the source for this service isn't available to you
+and keep the fix at the design level. Always note that the remediator's automated action
+(disabling the flag) already stopped the bleeding; the code-level fix is the durable change.`
 
 func userPrompt(inc Incident, metrics []evidence.Metric, precedent []corpus.Incident) string {
 	var b strings.Builder

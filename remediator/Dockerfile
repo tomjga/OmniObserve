@@ -25,6 +25,9 @@ RUN apk add --no-cache ca-certificates
 COPY --from=builder /app/remediator /app/
 # The incident corpus the RCA copilot retrieves precedent from (CORPUS_DIR=/app/incidents).
 COPY incidents /app/incidents
+# Curated codebase knowledge so the copilot grounds its remediation in the real fault path
+# (KNOWLEDGE_DIR=/app/knowledge).
+COPY knowledge /app/knowledge
 
 EXPOSE 8080
 
