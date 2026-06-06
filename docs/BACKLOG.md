@@ -32,3 +32,29 @@ Concrete angles:
 - The **remediator / RCA copilot** acts as an **MCP client** consuming those servers.
 - Design Phase 2 retrieval + tool access behind an interface an MCP server can wrap
   later, so we don't paint ourselves into a bespoke-integration corner.
+
+## 3. Per-service fault injection (generalize beyond product-catalog)
+
+Today the self-heal demo and the remediator are hard-wired to a single fault:
+`productCatalogFailure` on `product-catalog` (one flagd flag, one PrometheusRule, one
+bounded action). The OTel demo ships flagd flags for many services — `adServiceFailure`
+/ `adServiceHighCpu`, `cartServiceFailure`, `paymentServiceFailure` /
+`paymentServiceUnreachable`, `recommendationServiceCacheFailure`, `kafkaQueueProblems`,
+`imageSlowLoad`, etc. We should be able to inject a fault in **each** service and drive
+the same detect → alert → remediate → RCA loop.
+
+Concrete angles:
+- **Fault catalog** — a small declarative map: `service → { flag, PrometheusRule,
+  SLO query, bounded remediation action }`. Both the demo bridge and the remediator
+  read from it instead of hardcoding `productCatalogFailure`.
+- **Per-service SLO rules** — generate a PrometheusRule per service (error-rate /
+  latency) so each fault has a real alert that fires.
+- **Remediator generalization** — make the bounded action parameterized by the catalog
+  entry (disable that service's flag), keeping the cooldown/dry-run/reversibility guards.
+- **Demo UX** — a service picker in the live "Run live" widget so you can choose which
+  service to break; the error-ratio chart + pod table + RCA follow the selected service.
+- **Stretch** — multiple/cascading faults to show blast-radius and dependency-aware RCA
+  (ties to [[rca-compendium]] and the Phase 2 RCA copilot).
+
+**Why it matters:** proves the loop is a *general* control system, not a one-off scripted
+demo — much stronger interview signal.
