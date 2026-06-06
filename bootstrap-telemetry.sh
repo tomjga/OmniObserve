@@ -38,6 +38,16 @@ echo "==> OTel Collector (config from collector/otelcol-config.yaml)"
 kubectl create configmap otelcol-config -n "$NS" \
   --from-file=config.yaml="$ROOT/collector/otelcol-config.yaml" \
   --dry-run=client -o yaml | kubectl apply -f -
+# Grafana Cloud OTLP secret: use the real (gitignored) file if present, else seed a harmless
+# placeholder so the collector starts (cloud exports just fail-and-retry; local pipelines fine).
+if [ -f "$ROOT/collector/grafana-cloud-secret.yaml" ]; then
+  kubectl apply -n "$NS" -f "$ROOT/collector/grafana-cloud-secret.yaml"
+else
+  kubectl create secret generic grafana-cloud-otlp -n "$NS" \
+    --from-literal=endpoint="https://otlp-gateway.invalid/otlp" \
+    --from-literal=authorization="Basic none" \
+    --dry-run=client -o yaml | kubectl apply -f -
+fi
 kubectl apply -n "$NS" -f "$ROOT/collector/k8s/collector.yaml"
 kubectl rollout restart deployment/otelcol -n "$NS" >/dev/null 2>&1 || true
 
