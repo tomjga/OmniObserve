@@ -58,3 +58,26 @@ Concrete angles:
 
 **Why it matters:** proves the loop is a *general* control system, not a one-off scripted
 demo — much stronger interview signal.
+
+## 4. Approval gate (human-in-the-loop toggle via chat)
+
+Today the remediator acts autonomously (bounded, reversible, cooldown/dry-run guarded). Add
+a **toggle** that, when on, requires a **human approval** before the action runs — sent to a
+chat tool with **Approve / Deny** buttons. Use a **Slack incoming webhook**, or a free
+messaging tool (**Telegram bot**, **Discord webhook**) so it costs nothing.
+
+Concrete angles:
+- **Modes**: `auto` (act immediately, today's behaviour) vs `approval` (notify + wait).
+  Configurable per-policy (ties to the staff-level `RemediationPolicy` /
+  [[staff-principal-and-maturity]] progressive-autonomy idea) — e.g. low-blast-radius
+  actions auto, higher-risk ones require approval.
+- **Notification**: post the incident (alert, evidence, the action the remediator *would*
+  take, and the AI's proposed remediation) to the webhook with approve/deny actions or a
+  reply command.
+- **Wait + timeout**: hold the action for a bounded window; on approve → act, on deny → skip
+  and record, on timeout → fall back to the policy default (skip or act).
+- **Audit**: record who approved/denied as a metric label + in the RCA, so the decision is
+  on the record.
+
+**Why it matters:** shows judgement about *autonomy levels* — auto-remediation isn't all-or-
+nothing; you can gate risky actions behind a human while keeping safe ones automatic.
