@@ -1,11 +1,15 @@
-# SLO alert for an OTel Demo service, wired into the remediator control loop. When the
-# flagd flag named in remediation_flag is on, this service's gRPC error ratio climbs, the
-# alert fires, Alertmanager routes it (omniobserve_remediate="true") to the remediator,
-# and the remediator disables that flag in the flagd ConfigMap — which flagd (watching the
-# ConfigMap, see bootstrap-telemetry.sh) hot-reloads and pushes to consumers, auto-healing.
+# SLO alerts for OTel Demo services, wired into the remediator control loop. When the flagd
+# flag named in remediation_flag is on, that service's gRPC error ratio climbs, the alert
+# fires, Alertmanager routes it (omniobserve_remediate="true") to the remediator, and the
+# remediator disables that flag in the flagd ConfigMap — which flagd (watching the ConfigMap,
+# see bootstrap-telemetry.sh) hot-reloads and pushes to consumers, auto-healing.
 #
-# We alert on product-catalog: productCatalogFailure makes GetProduct throw Status.INTERNAL
-# (a clean gRPC error), and product-catalog emits rpc_server_duration with a status code.
+# Each rule is the same SLO shape (gRPC error ratio > 5% for 1m) for a different service, so
+# the demo can fault any of them (see the bridge's fault catalog + knowledge/<svc>.md).
+# Reality note: under the demo's DEFAULT load only product-catalog is on the hot path
+# (~0.64 req/s) and breaches quickly; ad gets far less traffic (~0.04 req/s), so its rule is
+# wired and correct but may not fire without extra load. Adding a service = another rule here
+# + a fault-catalog entry + a knowledge file.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -36,3 +40,23 @@ spec:
             description: "product-catalog is returning gRPC errors — likely the productCatalogFailure feature flag."
             # The remediator disables this flagd flag to stop the bleeding.
             remediation_flag: productCatalogFailure
+
+        # Same SLO shape for the ad service (adFailure). ad is lower-traffic than
+        # product-catalog, so this rule is wired/correct but may need extra load to fire.
+        - alert: AdHighErrorRate
+          expr: |
+            (
+              sum(rate(rpc_server_duration_milliseconds_count{job="ad", rpc_grpc_status_code!="0"}[2m]))
+              /
+              clamp_min(sum(rate(rpc_server_duration_milliseconds_count{job="ad"}[2m])), 1)
+            ) or vector(0)
+            > 0.05
+          for: 1m
+          labels:
+            severity: critical
+            service: ad
+            omniobserve_remediate: "true"
+          annotations:
+            summary: "ad gRPC error ratio above 5%"
+            description: "ad is returning gRPC errors — likely the adFailure feature flag."
+            remediation_flag: adFailure
