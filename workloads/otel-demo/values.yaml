@@ -29,6 +29,14 @@ default:
       value: otelcol.monitoring.svc.cluster.local
 
 components:
+  # The .NET accounting service OOM-restarted repeatedly at the chart default 120Mi on
+  # Rancher Desktop while consuming the demo's steady Kafka traffic. Keep this local bump
+  # narrow instead of raising resources across the whole demo.
+  accounting:
+    resources:
+      limits:
+        memory: 256Mi
+
   # Load generator: kept ON but turned WAY down. The default (10 users + headless
   # browser traffic) pegged CPU and starved the kube-apiserver. At 3 users with browser
   # traffic off it's a gentle, steady stream of real browse traffic — enough to keep

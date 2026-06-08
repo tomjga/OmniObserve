@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ func TestMain(m *testing.M) {
 
 func newRouter() *gin.Engine {
 	r := gin.New()
-	r.POST("/webhook", webhookHandler)
+	r.POST("/webhook", webhookAuthMiddleware(), webhookHandler)
 	r.GET("/healthz", healthHandler)
 	return r
 }
@@ -97,6 +98,111 @@ func TestWebhookHandler(t *testing.T) {
 	}
 }
 
+func TestWebhookBearerAuth(t *testing.T) {
+	t.Setenv("WEBHOOK_BEARER_TOKEN", "secret")
+	payload := `{"status":"firing","alerts":[]}`
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want 401", w.Code)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer secret")
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d, want 200", w.Code)
+	}
+}
+
+func TestWebhookUsesCatalogWithoutRemediationAnnotation(t *testing.T) {
+	r, cs := newFakeRemediator(t, "on", false, time.Minute)
+	oldRemediator, oldCatalog, oldStop := flagRemediator, faultCatalog, autonomousStop
+	flagRemediator, faultCatalog, autonomousStop = r, defaultFaultCatalog(), false
+	defer func() { flagRemediator, faultCatalog, autonomousStop = oldRemediator, oldCatalog, oldStop }()
+
+	payload := `{"status":"firing","alerts":[
+		{"status":"firing","labels":{"alertname":"ProductCatalogHighErrorRate","service":"product-catalog","severity":"critical"},
+		 "annotations":{"summary":"catalog should choose productCatalogFailure"}}]}`
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	newRouter().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if v := currentVariant(t, cs); v != "off" {
+		t.Fatalf("catalog remediation left flag %q, want off", v)
+	}
+}
+
+func TestGlobalStopSwitchBlocksMutation(t *testing.T) {
+	r, cs := newFakeRemediator(t, "on", false, time.Minute)
+	oldRemediator, oldCatalog, oldStop := flagRemediator, faultCatalog, autonomousStop
+	flagRemediator, faultCatalog, autonomousStop = r, defaultFaultCatalog(), true
+	defer func() { flagRemediator, faultCatalog, autonomousStop = oldRemediator, oldCatalog, oldStop }()
+
+	payload := `{"status":"firing","alerts":[
+		{"status":"firing","labels":{"alertname":"ProductCatalogHighErrorRate","service":"product-catalog","severity":"critical"},
+		 "annotations":{"summary":"stop switch should block mutation"}}]}`
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	newRouter().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if v := currentVariant(t, cs); v != "on" {
+		t.Fatalf("global stop switch mutated flag to %q, want on", v)
+	}
+}
+
+func TestAutonomyObserveBlocksMutation(t *testing.T) {
+	r, cs := newFakeRemediator(t, "on", false, time.Minute)
+	oldRemediator, oldCatalog, oldStop, oldMode := flagRemediator, faultCatalog, autonomousStop, autonomyMode
+	flagRemediator, faultCatalog, autonomousStop, autonomyMode = r, defaultFaultCatalog(), false, AutonomyObserve
+	defer func() {
+		flagRemediator, faultCatalog, autonomousStop, autonomyMode = oldRemediator, oldCatalog, oldStop, oldMode
+	}()
+
+	payload := `{"status":"firing","alerts":[
+		{"status":"firing","labels":{"alertname":"ProductCatalogHighErrorRate","service":"product-catalog","severity":"critical"},
+		 "annotations":{"summary":"observe mode should block mutation"}}]}`
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	newRouter().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if v := currentVariant(t, cs); v != "on" {
+		t.Fatalf("observe mode mutated flag to %q, want on", v)
+	}
+}
+
+func TestEffectiveAutonomyUsesSaferMode(t *testing.T) {
+	policy := defaultFaultCatalog().Faults[0]
+	policy.Safety.Autonomy = string(AutonomyAutoWithVerify)
+	if got := effectiveAutonomy(AutonomySuggest, policy); got != AutonomySuggest {
+		t.Fatalf("effectiveAutonomy = %q, want suggest", got)
+	}
+	policy.Safety.Autonomy = string(AutonomyApproval)
+	if got := effectiveAutonomy(AutonomyAutoWithVerify, policy); got != AutonomyApproval {
+		t.Fatalf("effectiveAutonomy = %q, want approval", got)
+	}
+}
+
 // TestAlertKeys covers the label fallbacks so metrics/idempotency keys are never empty.
 func TestAlertKeys(t *testing.T) {
 	withName := Alert{Labels: map[string]string{"alertname": "HighErrorRate", "service": "cart"}}
@@ -114,5 +220,18 @@ func TestAlertKeys(t *testing.T) {
 	}
 	if got := noName.incidentKey(); got != "abc123|api-service" {
 		t.Errorf("incidentKey fallback = %q, want abc123|api-service", got)
+	}
+}
+
+func TestNoopStormGuard(t *testing.T) {
+	g := NewNoopStormGuard(2, time.Minute)
+	if g.Record("flag", "incident") {
+		t.Fatal("first already-safe outcome should not escalate")
+	}
+	if g.Record("flag", "incident") {
+		t.Fatal("second already-safe outcome at threshold should not escalate")
+	}
+	if !g.Record("flag", "incident") {
+		t.Fatal("third already-safe outcome should escalate")
 	}
 }

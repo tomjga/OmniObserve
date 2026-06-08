@@ -40,11 +40,14 @@ func (a Alert) alertName() string {
 // the alert rule plus the series it fired on. Two alerts with the same key are the
 // "same incident" and must not trigger repeated actions.
 func (a Alert) incidentKey() string {
-	svc := a.Labels["service"]
-	if svc == "" {
-		svc = a.Labels["job"]
+	return a.alertName() + "|" + a.serviceName()
+}
+
+func (a Alert) serviceName() string {
+	if svc := a.Labels["service"]; svc != "" {
+		return svc
 	}
-	return a.alertName() + "|" + svc
+	return a.Labels["job"]
 }
 
 // remediationFlag is the flagd flag this alert asks the remediator to disable, carried

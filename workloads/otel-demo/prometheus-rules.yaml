@@ -60,3 +60,23 @@ spec:
             summary: "ad gRPC error ratio above 5%"
             description: "ad is returning gRPC errors — likely the adFailure feature flag."
             remediation_flag: adFailure
+
+        # Same SLO shape for the cart service (cartFailure). This is intentionally wired
+        # through the same catalog/remediator path so the self-heal loop is not a one-off.
+        - alert: CartHighErrorRate
+          expr: |
+            (
+              sum(rate(rpc_server_duration_milliseconds_count{job="cart", rpc_grpc_status_code!="0"}[2m]))
+              /
+              clamp_min(sum(rate(rpc_server_duration_milliseconds_count{job="cart"}[2m])), 1)
+            ) or vector(0)
+            > 0.05
+          for: 1m
+          labels:
+            severity: critical
+            service: cart
+            omniobserve_remediate: "true"
+          annotations:
+            summary: "cart gRPC error ratio above 5%"
+            description: "cart is returning gRPC errors — likely the cartFailure feature flag."
+            remediation_flag: cartFailure

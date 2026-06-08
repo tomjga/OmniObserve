@@ -1,0 +1,28 @@
+{
+  "faults": [
+    {
+      "service": "product-catalog",
+      "symptom": "high-grpc-error-rate",
+      "alert": "ProductCatalogHighErrorRate",
+      "action": { "type": "disable-flag", "flag": "productCatalogFailure" },
+      "safety": { "cooldown": "5m", "autonomy": "auto-with-verify", "maxActionsPerHour": 1 },
+      "evidence": { "prometheusQueries": ["error_ratio", "request_rate"] }
+    },
+    {
+      "service": "ad",
+      "symptom": "high-grpc-error-rate",
+      "alert": "AdHighErrorRate",
+      "action": { "type": "disable-flag", "flag": "adFailure" },
+      "safety": { "cooldown": "5m", "autonomy": "auto-with-verify", "maxActionsPerHour": 1 },
+      "evidence": { "prometheusQueries": ["error_ratio", "request_rate"] }
+    },
+    {
+      "service": "cart",
+      "symptom": "high-grpc-error-rate",
+      "alert": "CartHighErrorRate",
+      "action": { "type": "disable-flag", "flag": "cartFailure" },
+      "safety": { "cooldown": "5m", "autonomy": "auto-with-verify", "maxActionsPerHour": 1 },
+      "evidence": { "prometheusQueries": ["error_ratio", "request_rate"] }
+    }
+  ]
+}

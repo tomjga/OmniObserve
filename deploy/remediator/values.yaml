@@ -24,6 +24,24 @@ alerting:
   enabled: true
   matchLabel: omniobserve_remediate
 
+auth:
+  # Optional webhook bearer auth. When enabled, Alertmanager sends Authorization: Bearer
+  # from this Secret key and the remediator requires the same token on POST /webhook.
+  enabled: false
+  secretName: remediator-webhook-auth
+  secretKey: token
+
+stop:
+  # Global stop switch: route/observe alerts but do not mutate state. Useful during demos
+  # and as the production "big red button" pattern.
+  enabled: false
+
+autonomy:
+  # Global ceiling for catalog policies. Less-autonomous values here override more-autonomous
+  # catalog entries; safer catalog entries still win over this default.
+  # Valid: observe, suggest, approval, auto, auto-with-verify.
+  mode: auto-with-verify
+
 # The bounded action: disable a flagd feature flag named in the alert's
 # remediation_flag annotation. flagd lives in another namespace, so we render a
 # ServiceAccount + a Role/RoleBinding (in flagd.namespace) scoped to that one ConfigMap.
@@ -38,6 +56,29 @@ dryRun: false
 # Per-incident cooldown: don't act twice on the same incident within this window.
 cooldownSeconds: 300
 
+# Repeated already-safe outcomes mean the loop has no useful state transition left. Escalate
+# them as needs_human after this many repeats within the window.
+noopStorm:
+  threshold: 3
+  windowSeconds: 900
+
+# After a real action, sample Prometheus before/after and record whether the signal improved.
+verification:
+  delaySeconds: 30
+  sampleTimeoutSeconds: 3
+
+catalog:
+  mountPath: /etc/remediator/fault-catalog.json
+
+networkPolicy:
+  enabled: false
+  # This profile is intentionally conservative and assumes remediator, Alertmanager,
+  # Prometheus, Grafana, and the OTel Collector live in the same namespace.
+  allowSameNamespaceIngress: true
+  allowSameNamespaceEgress: true
+  allowDNS: true
+  allowExternalHTTPS: true
+
 rbac:
   # Create the ServiceAccount + Role/RoleBinding that let the remediator patch flagd.
   create: true
@@ -48,6 +89,10 @@ rbac:
 # The copilot degrades gracefully: with no LLM key it stays disabled and the loop is action-only.
 rca:
   enabled: true
+  # Bound LLM/RCA fan-out during alert storms. The webhook stays fast; excess drafts are
+  # dropped and counted rather than creating unbounded goroutines.
+  workers: 2
+  queueDepth: 20
   secretName: remediator-rca
   llm:
     baseURL: "" # e.g. https://generativelanguage.googleapis.com/v1beta/openai (vendor-agnostic)

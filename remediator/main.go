@@ -1,8 +1,6 @@
 // Command remediator is OmniObserve's control-loop service. It receives Alertmanager
-// webhooks when an SLO burns and (in later steps) takes a bounded, auditable action to
-// stop the bleeding. This first cut is OBSERVE-ONLY: it parses alerts, logs them, and
-// counts them — no mutation yet. That lets us wire and validate the alert path end to
-// end before giving the loop any power.
+// webhooks when an SLO burns, takes a bounded auditable action, verifies whether the
+// signal improved, and optionally drafts an RCA.
 package main
 
 import (
@@ -10,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +20,8 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	"github.com/tomjga/OmniObserve/services/shared/telemetry"
 )
 
 // logger is the package-level structured logger, assigned in main (mirrors api-service).
@@ -34,6 +35,17 @@ var version = "dev"
 // the service stays observe-only — every action call site is nil-guarded.
 var flagRemediator *FlagRemediator
 
+// rcaQueue bounds asynchronous RCA drafting. It stays nil when the copilot is disabled.
+var rcaQueue *RCAQueue
+
+// noopGuard detects repeated idempotent "already safe" outcomes for the same incident.
+// That pattern means the remediator has no useful state transition left to perform.
+var noopGuard *NoopStormGuard
+
+var faultCatalog *FaultCatalog
+
+var autonomousStop bool
+
 var (
 	// alertsReceived: "what did the remediator see?"
 	alertsReceived = prometheus.NewCounterVec(
@@ -44,7 +56,7 @@ var (
 		[]string{"alertname", "status"},
 	)
 	// actionsTotal: "what did the remediator do, and how did it turn out?" — the audit
-	// trail for every remediation decision (disabled/already_off/dry_run/cooldown/error).
+	// trail for every remediation decision.
 	actionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "remediator_actions_total",
@@ -52,10 +64,24 @@ var (
 		},
 		[]string{"flag", "outcome"},
 	)
+	noopStormsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "remediator_noop_storms_total",
+			Help: "Repeated already-safe remediations escalated as needing human attention.",
+		},
+		[]string{"flag"},
+	)
+	webhookDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "remediator_webhook_duration_seconds",
+			Help:    "Alertmanager webhook handler duration.",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
 )
 
 func init() {
-	prometheus.MustRegister(alertsReceived, actionsTotal)
+	prometheus.MustRegister(alertsReceived, actionsTotal, noopStormsTotal, webhookDuration)
 }
 
 // initRemediator builds the flagd action from env config, or returns nil (observe-only)
@@ -100,7 +126,7 @@ func envInt(key string, def int) int {
 }
 
 func main() {
-	shutdownTracer, err := initTracer()
+	shutdownTracer, err := telemetry.InitTracer(context.Background(), "remediator", version)
 	if err != nil {
 		panic(err)
 	}
@@ -110,15 +136,44 @@ func main() {
 	defer func() { _ = zapLogger.Sync() }()
 	logger = zapLogger.Sugar()
 
+	autonomousStop = os.Getenv("REMEDIATOR_STOP") == "true"
+	if autonomousStop {
+		logger.Warn("global remediation stop switch enabled; actions will not mutate state")
+	}
+	var ok bool
+	autonomyMode, ok = parseAutonomyMode(envStr("REMEDIATOR_AUTONOMY_MODE", string(AutonomyAutoWithVerify)))
+	if !ok {
+		logger.Warnw("invalid autonomy mode; defaulting to auto-with-verify", "configured", os.Getenv("REMEDIATOR_AUTONOMY_MODE"))
+	}
+	noopGuard = NewNoopStormGuard(
+		envInt("REMEDIATOR_NOOP_STORM_THRESHOLD", 3),
+		time.Duration(envInt("REMEDIATOR_NOOP_STORM_WINDOW_SECONDS", 900))*time.Second,
+	)
+	var catalogErr error
+	faultCatalog, catalogErr = LoadFaultCatalog(envStr("REMEDIATION_CATALOG_PATH", "/etc/remediator/fault-catalog.json"))
+	if catalogErr != nil {
+		logger.Warnw("using fallback fault catalog", "error", catalogErr)
+	}
+	logger.Infow("fault catalog ready", "entries", len(faultCatalog.Faults), "global_autonomy", string(autonomyMode))
+	verifier = initVerifier()
+	if verifier != nil {
+		logger.Infow("post-action verifier ready", "delay", verifier.delay.String())
+	}
 	flagRemediator = initRemediator()
 	copilot, publisher = initCopilot()
+	if copilot != nil && copilot.Enabled() {
+		workers := envInt("RCA_WORKERS", 2)
+		rcaQueue = NewRCAQueue(workers, envInt("RCA_QUEUE_DEPTH", 20))
+		rcaQueue.Start(workers)
+		logger.Infow("rca queue ready", "workers", workers, "depth", envInt("RCA_QUEUE_DEPTH", 20))
+	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(otelgin.Middleware("remediator")) // one span per request
 	router.Use(timeoutMiddleware(30 * time.Second))
 
-	router.POST("/webhook", webhookHandler) // Alertmanager posts here
+	router.POST("/webhook", webhookAuthMiddleware(), webhookHandler) // Alertmanager posts here
 	router.GET("/healthz", healthHandler)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -137,6 +192,9 @@ func main() {
 // raw material the action step (disable the offending feature flag) and the RCA copilot
 // will build on.
 func webhookHandler(c *gin.Context) {
+	start := time.Now()
+	defer func() { webhookDuration.Observe(time.Since(start).Seconds()) }()
+
 	var payload AlertmanagerWebhook
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		logger.Warnw("webhook: bad payload", "error", err)
@@ -173,31 +231,154 @@ func webhookHandler(c *gin.Context) {
 // remediate runs the bounded action for one alert: only firing alerts that explicitly
 // name a flag are acted on, and only when the remediator is active (has a cluster).
 func remediate(ctx context.Context, span trace.Span, alert Alert) {
-	flag := alert.remediationFlag()
-	if alert.Status != "firing" || flag == "" || flagRemediator == nil {
+	if alert.Status != "firing" {
+		return
+	}
+	policy, ok := faultCatalog.Lookup(alert)
+	if !ok || policy.Action.Type != "disable-flag" || policy.Action.Flag == "" {
+		recordAction("none", OutcomeUnsupported, span)
+		logger.Infow("remediation unsupported",
+			"reason", "no_catalog_policy",
+			"incident_key", alert.incidentKey(),
+			"alertname", alert.alertName())
+		return
+	}
+	flag := policy.Action.Flag
+	mode := effectiveAutonomy(autonomyMode, policy)
+	if annotated := alert.remediationFlag(); annotated != "" && annotated != flag {
+		logger.Warnw("alert remediation_flag ignored; catalog is authoritative",
+			"incident_key", alert.incidentKey(),
+			"annotated_flag", annotated,
+			"catalog_flag", flag)
+	}
+	if autonomousStop {
+		recordAction(flag, OutcomeNeedsHuman, span)
+		logger.Warnw("global stop switch blocked remediation",
+			"flag", flag,
+			"incident_key", alert.incidentKey())
+		return
+	}
+	switch mode {
+	case AutonomyObserve:
+		recordAction(flag, OutcomeNeedsHuman, span)
+		logger.Infow("autonomy observe: action suppressed",
+			"flag", flag,
+			"incident_key", alert.incidentKey())
+		return
+	case AutonomySuggest:
+		recordAction(flag, OutcomeNeedsHuman, span)
+		logger.Infow("autonomy suggest: drafting recommendation without mutation",
+			"flag", flag,
+			"incident_key", alert.incidentKey())
+		if rcaQueue != nil {
+			rcaQueue.EnqueueWithVerification(alert,
+				"suggested disabling flagd flag "+flag+"; no mutation performed (autonomy mode suggest)",
+				"not_applicable")
+		}
+		return
+	case AutonomyApproval:
+		recordAction(flag, OutcomeNeedsHuman, span)
+		logger.Warnw("autonomy approval: human approval required before mutation",
+			"flag", flag,
+			"incident_key", alert.incidentKey())
+		if rcaQueue != nil {
+			rcaQueue.EnqueueWithVerification(alert,
+				"approval required before disabling flagd flag "+flag+"; no mutation performed",
+				"not_applicable")
+		}
+		return
+	}
+	if flagRemediator == nil {
+		recordAction(flag, OutcomeUnsupported, span)
+		logger.Infow("remediation unsupported",
+			"reason", "remediator_inactive",
+			"flag", flag,
+			"incident_key", alert.incidentKey())
 		return
 	}
 
+	var before []ObservedMetric
+	if verifier != nil {
+		before = verifier.Gather(ctx, alert.serviceName())
+	}
+
 	outcome, err := flagRemediator.DisableFlag(ctx, flag, alert.incidentKey())
-	result := string(outcome)
 	if err != nil {
-		result = "error"
+		outcome = OutcomeFailed
 		logger.Errorw("remediation failed", "flag", flag, "incident_key", alert.incidentKey(), "error", err)
 	} else {
+		if outcome == OutcomeAlreadySafe && noopGuard != nil && noopGuard.Record(flag, alert.incidentKey()) {
+			outcome = OutcomeNeedsHuman
+			noopStormsTotal.WithLabelValues(flag).Inc()
+			logger.Warnw("no-op remediation storm; escalating",
+				"flag", flag,
+				"incident_key", alert.incidentKey(),
+				"threshold", noopGuard.threshold,
+				"window", noopGuard.window.String())
+		}
 		logger.Infow("remediation",
-			"flag", flag, "outcome", result, "incident_key", alert.incidentKey())
+			"flag", flag, "outcome", string(outcome), "incident_key", alert.incidentKey())
 	}
-	actionsTotal.WithLabelValues(flag, result).Inc()
-	span.AddEvent("remediation", trace.WithAttributes(
-		attribute.String("flag", flag),
-		attribute.String("outcome", result),
-	))
+	recordAction(flag, outcome, span)
 
 	// When we actually disabled a flag (once per incident — repeats hit cooldown), draft
-	// a grounded RCA in the background. Async so the LLM call never blocks the webhook.
-	if outcome == OutcomeDisabled {
-		go draftRCA(alert, "disabled flagd flag "+flag)
+	// a grounded RCA in the bounded queue. The LLM call never blocks the webhook, and
+	// incident storms cannot create unbounded goroutines.
+	if outcome == OutcomeHealed {
+		if mode == AutonomyAutoWithVerify {
+			verifyAndDraftAfterAction(alert, flag, before)
+		} else {
+			verifyAfterAction(alert, flag, before)
+			if rcaQueue != nil {
+				rcaQueue.EnqueueWithVerification(alert, "disabled flagd flag "+flag, "pending")
+			}
+		}
 	}
+}
+
+func recordAction(flag string, outcome Outcome, span trace.Span) {
+	actionsTotal.WithLabelValues(flag, string(outcome)).Inc()
+	span.AddEvent("remediation", trace.WithAttributes(
+		attribute.String("flag", flag),
+		attribute.String("outcome", string(outcome)),
+	))
+}
+
+// NoopStormGuard tracks repeated idempotent outcomes in-memory. Persistence is not needed
+// for the guard: persisted cooldowns protect mutation; this only quiets alert noise.
+type NoopStormGuard struct {
+	mu        sync.Mutex
+	seen      map[string][]time.Time
+	threshold int
+	window    time.Duration
+}
+
+func NewNoopStormGuard(threshold int, window time.Duration) *NoopStormGuard {
+	if threshold < 1 {
+		threshold = 1
+	}
+	if window <= 0 {
+		window = 15 * time.Minute
+	}
+	return &NoopStormGuard{seen: map[string][]time.Time{}, threshold: threshold, window: window}
+}
+
+func (g *NoopStormGuard) Record(flag, incidentKey string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	now := time.Now()
+	key := flag + "|" + incidentKey
+	cutoff := now.Add(-g.window)
+	var recent []time.Time
+	for _, at := range g.seen[key] {
+		if at.After(cutoff) {
+			recent = append(recent, at)
+		}
+	}
+	recent = append(recent, now)
+	g.seen[key] = recent
+	return len(recent) > g.threshold
 }
 
 // healthHandler reports liveness and the build version (same contract as api-service).
@@ -211,6 +392,22 @@ func timeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 		defer cancel()
 		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
+}
+
+func webhookAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := os.Getenv("WEBHOOK_BEARER_TOKEN")
+		if token == "" {
+			c.Next()
+			return
+		}
+		if c.GetHeader("Authorization") != "Bearer "+token {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized webhook"})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

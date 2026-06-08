@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Deps first for layer caching.
 COPY remediator/go.mod remediator/go.sum ./
+COPY services/shared/telemetry /services/shared/telemetry
 RUN go mod download
 
 # Remediator source (top-level *.go + internal/ packages).

@@ -25,4 +25,12 @@ spec:
       webhookConfigs:
         - url: http://{{ include "remediator.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/webhook
           sendResolved: true
+          {{- if .Values.auth.enabled }}
+          httpConfig:
+            authorization:
+              type: Bearer
+              credentials:
+                name: {{ .Values.auth.secretName }}
+                key: {{ .Values.auth.secretKey }}
+          {{- end }}
 {{- end }}

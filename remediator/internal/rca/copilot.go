@@ -20,12 +20,18 @@ import (
 
 // Incident is the context the remediator hands the copilot when an alert fires.
 type Incident struct {
-	AlertName   string
-	Service     string
-	Summary     string
-	IncidentKey string
-	Action      string // what the remediator did, e.g. "disabled flagd flag productCatalogFailure"
-	StartsAt    time.Time
+	AlertName          string
+	Service            string
+	Summary            string
+	IncidentKey        string
+	Action             string // what the remediator did, e.g. "disabled flagd flag productCatalogFailure"
+	VerificationResult string
+	StartsAt           time.Time
+}
+
+type DraftResult struct {
+	Body       string
+	Confidence Confidence
 }
 
 // Copilot drafts RCAs. Construct with New.
@@ -67,14 +73,15 @@ func (c *Copilot) Enabled() bool { return c.llm != nil && c.llm.Configured() }
 
 // Draft produces a markdown RCA for the incident. It is best-effort about evidence and
 // precedent (missing either just means a thinner prompt), but requires the LLM to answer.
-func (c *Copilot) Draft(ctx context.Context, inc Incident) (string, error) {
+func (c *Copilot) Draft(ctx context.Context, inc Incident) (DraftResult, error) {
 	var metrics []evidence.Metric
 	if c.prom != nil {
 		metrics = c.prom.Gather(ctx, inc.Service)
 	}
 	precedent := corpus.Retrieve(c.incidents, terms(inc), 3)
+	confidence := AssessConfidence(metrics, precedent, inc.VerificationResult)
 
-	user := userPrompt(inc, metrics, precedent)
+	user := userPrompt(inc, metrics, precedent, confidence)
 	// Codebase knowledge for the affected service: the real fault path + code-level fix, so
 	// the remediation the copilot proposes is grounded in the source, not invented.
 	if kb, ok := knowledge.Lookup(c.codebase, inc.Service); ok {
@@ -87,7 +94,11 @@ func (c *Copilot) Draft(ctx context.Context, inc Incident) (string, error) {
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: user},
 	}
-	return c.llm.Complete(ctx, messages)
+	body, err := c.llm.Complete(ctx, messages)
+	if err != nil {
+		return DraftResult{}, err
+	}
+	return DraftResult{Body: body, Confidence: confidence}, nil
 }
 
 const systemPrompt = `You are an SRE incident-analysis assistant for the OmniObserve platform.
@@ -97,16 +108,22 @@ causes not supported by the material. If the evidence is thin, say so. Prefer th
 most consistent with the described topology and the cited prior incidents. Output markdown
 with exactly these sections:
 ## Summary
-## Likely root cause
-## Evidence considered
-## Proposed remediation
+## Evidence
+## Likely cause
+## Action taken
+## Result
+## Confidence
+## Proposed follow-up
 ## Code-level fix
-## Recommended follow-up
 ## Related prior incidents (cite their IDs)
 
-For "Proposed remediation", give the most direct fix and state plainly whether the trigger is
-a test-injected feature flag (the common case here — see the architecture) or a genuine code/
-config defect.
+For "Action taken", state plainly whether the trigger is a test-injected feature flag (the
+common case here — see the architecture) or a genuine code/config defect, and say whether
+the remediator mutated state, only suggested, or waited for approval. For "Result", include
+the post-action verification result exactly as provided and interpret it cautiously.
+
+For "Confidence", use the provided confidence assessment. Include the numeric score, level,
+and short rationale; do not replace it with a subjective model confidence.
 
 For "Code-level fix": when a "Codebase knowledge" section is provided, ground the fix in it —
 name the specific file and function from that section, explain the exact code path that emits
@@ -116,7 +133,7 @@ knowledge is provided for the service, say the source for this service isn't ava
 and keep the fix at the design level. Always note that the remediator's automated action
 (disabling the flag) already stopped the bleeding; the code-level fix is the durable change.`
 
-func userPrompt(inc Incident, metrics []evidence.Metric, precedent []corpus.Incident) string {
+func userPrompt(inc Incident, metrics []evidence.Metric, precedent []corpus.Incident, confidence Confidence) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Incident\n")
 	fmt.Fprintf(&b, "- Alert: %s\n- Service: %s\n- Summary: %s\n", inc.AlertName, inc.Service, inc.Summary)
@@ -126,6 +143,9 @@ func userPrompt(inc Incident, metrics []evidence.Metric, precedent []corpus.Inci
 	if inc.Action != "" {
 		fmt.Fprintf(&b, "- Automated action already taken by the remediator: %s\n", inc.Action)
 	}
+	if inc.VerificationResult != "" {
+		fmt.Fprintf(&b, "- Post-action verification result: %s\n", inc.VerificationResult)
+	}
 
 	b.WriteString("\n# Evidence (Prometheus)\n")
 	if len(metrics) == 0 {
@@ -134,6 +154,9 @@ func userPrompt(inc Incident, metrics []evidence.Metric, precedent []corpus.Inci
 	for _, m := range metrics {
 		fmt.Fprintf(&b, "- %s: %s\n", m.Name, m.Value)
 	}
+
+	b.WriteString("\n# Confidence assessment\n")
+	b.WriteString(confidence.Render())
 
 	b.WriteString("\n# Prior incidents (most relevant first)\n")
 	if len(precedent) == 0 {

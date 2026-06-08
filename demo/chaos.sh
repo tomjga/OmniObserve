@@ -2,20 +2,24 @@
 set -euo pipefail
 # demo/chaos.sh — drive the whole self-heal loop with one command, unattended.
 #
-# Flips the productCatalogFailure feature flag ON (the fault), then watches the
-# autonomous loop run: product-catalog starts erroring -> the SLO burn alert fires
+# Flips a catalogued feature flag ON (the fault), then watches the autonomous loop run:
+# the target service starts erroring -> the SLO burn alert fires
 # -> Alertmanager calls the remediator -> the remediator disables the flag (heal)
 # -> the RCA copilot drafts a grounded analysis. The script reports each transition
 # with timing, so a recording shows the payoff without any manual steps.
 #
-#   ./demo/chaos.sh            run the full loop (inject -> watch heal -> report RCA)
-#   ./demo/chaos.sh --reset    force the flag back off (cleanup after an aborted run)
-#   ./demo/chaos.sh --status   show the current flag state + recent remediator activity
+#   ./demo/chaos.sh                  run product-catalog (default)
+#   ./demo/chaos.sh ad               run the ad fault
+#   ./demo/chaos.sh --reset cart     force cart's flag back off
+#   ./demo/chaos.sh --status ad      show ad flag + recent remediator activity
 #
-# The existing otel-demo load generator already drives traffic to product-catalog,
-# so no extra load is needed. Requires: kubectl context on the local cluster, jq.
+# The existing otel-demo load generator already drives traffic to product-catalog. Lower
+# traffic services may need extra load before their SLO alert fires. Requires: kubectl
+# context on the local cluster, jq.
 
-FLAG="productCatalogFailure"
+CATALOG="${CATALOG:-deploy/remediator/files/fault-catalog.json}"
+MODE="run"
+SERVICE="${SERVICE:-product-catalog}"
 NS_DEMO="otel-demo"
 NS_MON="monitoring"
 CM="flagd-config"
@@ -23,8 +27,23 @@ KEY="demo.flagd.json"
 DEPLOY="remediator"
 TIMEOUT="${TIMEOUT:-240}"   # seconds to wait for the auto-heal before giving up
 
+for arg in "$@"; do
+  case "$arg" in
+    --reset|--status|run) MODE="$arg" ;;
+    "") ;;
+    *) SERVICE="$arg" ;;
+  esac
+done
+
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 dim()  { printf '\033[2m%s\033[0m\n' "$1"; }
+
+load_fault() {
+  [ -f "$CATALOG" ] || { echo "fault catalog not found: $CATALOG"; exit 1; }
+  FLAG="$(jq -r --arg svc "$SERVICE" '.faults[] | select(.service == $svc) | .action.flag // empty' "$CATALOG")"
+  ALERT="$(jq -r --arg svc "$SERVICE" '.faults[] | select(.service == $svc) | .alert // empty' "$CATALOG")"
+  [ -n "$FLAG" ] || { echo "unknown service '$SERVICE' in $CATALOG"; exit 1; }
+}
 
 # kubectl jsonpath needs the dots in "demo.flagd.json" escaped, else it reads them as path separators.
 KEY_JP="${KEY//./\\.}"
@@ -50,26 +69,27 @@ copilot_state() {  # prints e.g.  enabled:true model:gemini-2.5-flash corpus_siz
 
 require() {
   command -v jq >/dev/null || { echo "jq is required"; exit 1; }
+  load_fault
   kubectl -n "$NS_DEMO" get cm "$CM" >/dev/null 2>&1 || {
     echo "cannot reach the cluster / $CM not found — is the local cluster up and bootstrapped?"; exit 1; }
 }
 
-case "${1:-run}" in
+case "$MODE" in
   --reset)
     require
     set_variant off
-    bold "flag $FLAG forced back to: $(flag_variant)"
+    bold "$SERVICE flag $FLAG forced back to: $(flag_variant)"
     exit 0 ;;
   --status)
     require
-    bold "flag $FLAG defaultVariant: $(flag_variant)"
+    bold "$SERVICE flag $FLAG defaultVariant: $(flag_variant)"
     echo "copilot:$(copilot_state)"
     dim "recent remediator activity:"
     kubectl -n "$NS_MON" logs "deploy/$DEPLOY" --tail=400 2>/dev/null \
-      | grep -E "remediation|rca (drafted|published)" | tail -n 8 || echo "  (none yet)"
+      | grep -E "$FLAG|$ALERT|remediation|rca (drafted|published)" | tail -n 8 || echo "  (none yet)"
     exit 0 ;;
   run|"") : ;;
-  *) echo "usage: $0 [--reset|--status]"; exit 2 ;;
+  *) echo "usage: $0 [run|--reset|--status] [service]"; exit 2 ;;
 esac
 
 require
@@ -86,10 +106,9 @@ echo
 since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 start="$(date +%s)"
 
-bold "==> injecting fault: $FLAG -> on"
+bold "==> injecting fault: $SERVICE / $FLAG -> on"
 set_variant on
-echo "    product-catalog will now throw on the target product; the otel-demo"
-echo "    load generator is already exercising it."
+echo "    $SERVICE will now exercise the catalogued fault path when traffic reaches it."
 echo
 dim "    expected timeline:  alert fires ~60s  ·  remediator heals ~75s"
 echo
@@ -107,7 +126,7 @@ printf '\r%*s\r' 60 ''   # clear the progress line
 if [ "$healed" -ne 1 ]; then
   bold "✗ no heal within ${TIMEOUT}s — the flag is still ON"
   dim "diagnostics:"
-  echo "  • alert firing?   kubectl -n $NS_MON get prometheusrule -A | grep ProductCatalog"
+  echo "  • alert firing?   kubectl -n $NS_MON get prometheusrule -A | grep $ALERT"
   echo "  • webhook calls?  kubectl -n $NS_MON logs deploy/$DEPLOY | grep 'alert received'"
   echo "  • load present?   kubectl -n $NS_DEMO get deploy load-generator"
   echo

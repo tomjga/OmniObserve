@@ -34,6 +34,12 @@ spec:
               value: {{ .Values.otel.endpoint | quote }}
             - name: REMEDIATOR_DRY_RUN
               value: {{ .Values.dryRun | quote }}
+            - name: REMEDIATOR_STOP
+              value: {{ .Values.stop.enabled | quote }}
+            - name: REMEDIATOR_AUTONOMY_MODE
+              value: {{ .Values.autonomy.mode | quote }}
+            - name: REMEDIATION_CATALOG_PATH
+              value: {{ .Values.catalog.mountPath | quote }}
             - name: FLAGD_NAMESPACE
               value: {{ .Values.flagd.namespace | quote }}
             - name: FLAGD_CONFIGMAP
@@ -42,6 +48,23 @@ spec:
               value: {{ .Values.flagd.configKey | quote }}
             - name: REMEDIATOR_COOLDOWN_SECONDS
               value: {{ .Values.cooldownSeconds | quote }}
+            - name: REMEDIATOR_NOOP_STORM_THRESHOLD
+              value: {{ .Values.noopStorm.threshold | quote }}
+            - name: REMEDIATOR_NOOP_STORM_WINDOW_SECONDS
+              value: {{ .Values.noopStorm.windowSeconds | quote }}
+            - name: REMEDIATOR_VERIFY_DELAY_SECONDS
+              value: {{ .Values.verification.delaySeconds | quote }}
+            - name: REMEDIATOR_VERIFY_SAMPLE_TIMEOUT_SECONDS
+              value: {{ .Values.verification.sampleTimeoutSeconds | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.rca.prometheusURL | quote }}
+            {{- if .Values.auth.enabled }}
+            - name: WEBHOOK_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.secretName }}
+                  key: {{ .Values.auth.secretKey }}
+            {{- end }}
             {{- if .Values.rca.enabled }}
             # RCA copilot — non-secret config from values, secrets from .Values.rca.secretName
             # (optional: missing keys just leave the copilot/sinks disabled).
@@ -49,8 +72,10 @@ spec:
               value: {{ .Values.rca.llm.baseURL | quote }}
             - name: LLM_MODEL
               value: {{ .Values.rca.llm.model | quote }}
-            - name: PROMETHEUS_URL
-              value: {{ .Values.rca.prometheusURL | quote }}
+            - name: RCA_WORKERS
+              value: {{ .Values.rca.workers | quote }}
+            - name: RCA_QUEUE_DEPTH
+              value: {{ .Values.rca.queueDepth | quote }}
             - name: GRAFANA_URL
               value: {{ .Values.rca.grafanaURL | quote }}
             - name: GITHUB_REPO
@@ -97,3 +122,12 @@ spec:
               drop: [ALL]
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: fault-catalog
+              mountPath: {{ .Values.catalog.mountPath }}
+              subPath: fault-catalog.json
+              readOnly: true
+      volumes:
+        - name: fault-catalog
+          configMap:
+            name: {{ include "remediator.fullname" . }}-catalog

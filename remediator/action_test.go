@@ -52,17 +52,36 @@ func currentVariant(t *testing.T, cs *fake.Clientset) string {
 	return flags["productCatalogFailure"].(map[string]any)["defaultVariant"].(string)
 }
 
+func cooldownAnnotation(t *testing.T, cs *fake.Clientset) map[string]string {
+	t.Helper()
+	cm, err := cs.CoreV1().ConfigMaps("otel-demo").Get(context.Background(), "flagd-config", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get configmap: %v", err)
+	}
+	if cm.Annotations == nil || cm.Annotations[cooldownsAnnotation] == "" {
+		return nil
+	}
+	var cooldowns map[string]string
+	if err := json.Unmarshal([]byte(cm.Annotations[cooldownsAnnotation]), &cooldowns); err != nil {
+		t.Fatalf("parse cooldown annotation: %v", err)
+	}
+	return cooldowns
+}
+
 func TestDisableFlag_TurnsOff(t *testing.T) {
 	r, cs := newFakeRemediator(t, "on", false, time.Minute)
 	got, err := r.DisableFlag(context.Background(), "productCatalogFailure", "inc1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != OutcomeDisabled {
-		t.Errorf("outcome = %q, want disabled", got)
+	if got != OutcomeHealed {
+		t.Errorf("outcome = %q, want healed", got)
 	}
 	if v := currentVariant(t, cs); v != "off" {
 		t.Errorf("flag defaultVariant = %q, want off", v)
+	}
+	if cooldowns := cooldownAnnotation(t, cs); cooldowns["inc1"] == "" {
+		t.Error("expected successful remediation to persist a cooldown annotation")
 	}
 }
 
@@ -72,8 +91,8 @@ func TestDisableFlag_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != OutcomeAlreadyOff {
-		t.Errorf("outcome = %q, want already_off", got)
+	if got != OutcomeAlreadySafe {
+		t.Errorf("outcome = %q, want already_safe", got)
 	}
 	if v := currentVariant(t, cs); v != "off" {
 		t.Errorf("flag defaultVariant = %q, want off", v)
@@ -92,6 +111,9 @@ func TestDisableFlag_DryRunDoesNotMutate(t *testing.T) {
 	if v := currentVariant(t, cs); v != "on" {
 		t.Errorf("dry-run mutated the flag to %q, want it left on", v)
 	}
+	if cooldowns := cooldownAnnotation(t, cs); len(cooldowns) != 0 {
+		t.Errorf("dry-run wrote cooldown annotation: %v", cooldowns)
+	}
 }
 
 func TestDisableFlag_Cooldown(t *testing.T) {
@@ -104,18 +126,36 @@ func TestDisableFlag_Cooldown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
-	if got != OutcomeCooldown {
-		t.Errorf("outcome = %q, want cooldown", got)
+	if got != OutcomeCooldownSkipped {
+		t.Errorf("outcome = %q, want cooldown_skipped", got)
 	}
 }
 
-func TestDisableFlag_Missing(t *testing.T) {
+func TestDisableFlag_CooldownSurvivesRemediatorRestart(t *testing.T) {
+	r, cs := newFakeRemediator(t, "on", false, time.Minute)
+	if _, err := r.DisableFlag(context.Background(), "productCatalogFailure", "inc1"); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+
+	// A fresh remediator has no process memory from the first call, so this only passes
+	// if cooldown state lives on the Kubernetes object.
+	restarted := NewFlagRemediator(cs, "otel-demo", "flagd-config", "demo.flagd.json", false, time.Minute)
+	got, err := restarted.DisableFlag(context.Background(), "productCatalogFailure", "inc1")
+	if err != nil {
+		t.Fatalf("after restart: %v", err)
+	}
+	if got != OutcomeCooldownSkipped {
+		t.Errorf("outcome = %q, want cooldown_skipped", got)
+	}
+}
+
+func TestDisableFlag_Unsupported(t *testing.T) {
 	r, _ := newFakeRemediator(t, "on", false, time.Minute)
 	got, err := r.DisableFlag(context.Background(), "noSuchFlag", "inc1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != OutcomeFlagMissing {
-		t.Errorf("outcome = %q, want flag_missing", got)
+	if got != OutcomeUnsupported {
+		t.Errorf("outcome = %q, want unsupported", got)
 	}
 }
