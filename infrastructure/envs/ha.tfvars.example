@@ -1,0 +1,9 @@
+# Posture: HA — the redundant pair + health-checked routing (enable-ha.sh reads ha.tfvars).
+# Copy to ha.tfvars (gitignored) and adjust. No secrets belong here.
+
+fqdn          = "app.example.com"
+otlp_endpoint = "" # OmniObserve collector OTLP ingest
+ssh_cidr      = "0.0.0.0/0" # CHANGE ME: lock to your /32
+
+# routing_policy is set per-scenario (active-active for A, active-passive for B/C) — override in
+# the scenario module if you want to flip it.

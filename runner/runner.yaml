@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gh-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gh-runner
+  template:
+    metadata:
+      labels:
+        app: gh-runner
+    spec:
+      containers:
+        - name: gh-runner
+          image: gh-runner
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REPO_URL
+              value: "https://github.com/tomjga/OmniObserve"
+            - name: RUNNER_TOKEN
+              value: "RUNNER_TOKEN"  
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000

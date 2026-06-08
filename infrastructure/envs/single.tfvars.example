@@ -1,0 +1,6 @@
+# Posture: SINGLE — one box, no redundancy. The baseline you compare HA/DR against.
+# Copy to single.tfvars (gitignored) and adjust. No secrets belong here.
+
+fqdn          = "app.example.com"
+otlp_endpoint = "" # OmniObserve collector OTLP ingest, e.g. "collector.internal:4317"
+ssh_cidr      = "0.0.0.0/0" # CHANGE ME: lock to your /32, e.g. "203.0.113.10/32"

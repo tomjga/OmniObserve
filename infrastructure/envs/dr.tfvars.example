@@ -1,0 +1,11 @@
+# Posture: DR — HA + cross-region/cross-cloud standby, backup replication, failover routing.
+# enable-dr.sh reads dr.tfvars. Copy to dr.tfvars (gitignored) and adjust. No secrets here.
+
+fqdn          = "app.example.com"
+otlp_endpoint = "" # OmniObserve collector OTLP ingest
+ssh_cidr      = "0.0.0.0/0" # CHANGE ME: lock to your /32
+
+# DR targets (documented in docs/MULTICLOUD-HA-DR.md):
+#   RTO target: <= 5 min   (DNS health-check interval + TTL)
+#   RPO target: <= 1 min   (datastore replication lag; 0 for stateless)
+# DR drill cadence: weekly scheduled destroy+apply of the standby (see the design doc).

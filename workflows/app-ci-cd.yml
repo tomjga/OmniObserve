@@ -1,0 +1,92 @@
+name: App CI/CD (Go Build → Test → Push → Argo CD Sync)
+
+# Only run when something inside `app/` changes, on pushes to main
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+
+env:
+  # Argo CD credentials (set these in Settings → Secrets → Actions)
+  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+  ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+  ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+
+jobs:
+  build_test_push_and_sync:
+    name: Build → Test → Push Image → Argo CD Sync
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: ./app
+
+    steps:
+      # 1) Checkout the repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2) Set up Go (adjust version as needed)
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+
+      # 3) Download dependencies
+      - name: Go - Download dependencies
+        run: go mod download
+
+      # 4) Run Go tests
+      - name: "Go: Run tests"
+        run: go test ./...
+
+      # 5) Set up Docker Buildx (optional but recommended)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 6) Log in to GitHub Container Registry (or your registry)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 7) Build & Push Docker image
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG=ghcr.io/${{ github.repository }}/app:${{ github.sha }}
+          docker build --pull -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
+        # Export the image tag for reference if needed
+      - name: Set IMAGE_TAG output
+        id: image_tag
+        run: echo "::set-output name=IMAGE::$IMAGE_TAG"
+
+      # 8) Install Argo CD CLI
+      - name: Install Argo CD CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd \
+            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      # 9) Argo CD Login
+      - name: Argo CD Login
+        run: |
+          argocd login ${{ env.ARGOCD_SERVER }} \
+            --username ${{ env.ARGOCD_USERNAME }} \
+            --password ${{ env.ARGOCD_PASSWORD }} \
+            --insecure
+
+      # 10) Sync AWS Argo CD Application
+      - name: Sync AWS Argo CD App
+        run: |
+          argocd app sync aws-app
+          argocd app wait aws-app --timeout 300
+
+      # 11) Sync Azure Argo CD Application
+      - name: Sync Azure Argo CD App
+        run: |
+          argocd app sync azure-app
+          argocd app wait azure-app --timeout 300
