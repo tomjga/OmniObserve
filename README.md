@@ -246,7 +246,7 @@ auditable control loop that detects, acts, verifies, and explains.
 | Delivery | 4/5 | CI tests/lint/vuln scan, signed image release workflow, Rollout canaries | Enforce signed images with admission policy. |
 | Operability | 4/5 | Bootstrap scripts, OpenTofu local stack, demo runbooks, dashboard panels | Add one-command reset and scripted demo recording. |
 | Auto-remediation | 4/5 | Catalog allowlist, stop switch, autonomy modes, verification, RCA confidence | Promote catalog to a `RemediationPolicy` CRD. |
-| Governance | 3/5 | Staff architecture notes, business-impact framing, reviewable RCA corpus drafts | Add service ownership/catalog metadata and approval workflow. |
+| Governance | 4/5 | Staff architecture notes, business-impact framing, reviewable RCA corpus drafts, approval-gated remediation | Add service ownership/catalog metadata and persistent approval audit storage. |
 
 The scorecard is deliberately simple: it gives a staff-level story for how this grows from
 one demo loop into a platform capability adopted across services.

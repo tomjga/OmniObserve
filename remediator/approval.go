@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -122,6 +123,9 @@ func (s *ApprovalStore) List(status ApprovalStatus) []ApprovalRequest {
 		}
 		items = append(items, item)
 	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.After(items[j].CreatedAt)
+	})
 	return items
 }
 
@@ -209,6 +213,15 @@ type approvalDecisionBody struct {
 	Note  string `json:"note"`
 }
 
+func parseApprovalStatus(raw string) (ApprovalStatus, bool) {
+	switch ApprovalStatus(raw) {
+	case "", ApprovalPending, ApprovalApproved, ApprovalDenied:
+		return ApprovalStatus(raw), true
+	default:
+		return "", false
+	}
+}
+
 var approvalStore *ApprovalStore
 
 var approvalDecisionsTotal = prometheus.NewCounterVec(
@@ -256,7 +269,11 @@ func refreshPendingApprovalsGauge() {
 }
 
 func listApprovalsHandler(c *gin.Context) {
-	status := ApprovalStatus(c.Query("status"))
+	status, ok := parseApprovalStatus(c.Query("status"))
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid approval status"})
+		return
+	}
 	items := ensureApprovalStore().List(status)
 	views := make([]ApprovalView, 0, len(items))
 	for _, item := range items {

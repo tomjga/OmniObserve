@@ -139,6 +139,54 @@ func TestApprovalBearerAuth(t *testing.T) {
 	}
 }
 
+func TestListApprovalsRejectsInvalidStatus(t *testing.T) {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/approvals?status=maybe", nil)
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestApprovalStoreDedupeAndNewestFirst(t *testing.T) {
+	store := NewApprovalStore()
+	alertA := Alert{
+		Status:      "firing",
+		Labels:      map[string]string{"alertname": "A", "service": "checkout"},
+		Annotations: map[string]string{"summary": "first"},
+	}
+	alertB := Alert{
+		Status:      "firing",
+		Labels:      map[string]string{"alertname": "B", "service": "cart"},
+		Annotations: map[string]string{"summary": "second"},
+	}
+
+	first, created := store.Create(alertA, "flagA")
+	if !created {
+		t.Fatal("first approval should be created")
+	}
+	duplicate, created := store.Create(alertA, "flagA")
+	if created {
+		t.Fatal("duplicate pending approval should not be created")
+	}
+	if duplicate.ID != first.ID {
+		t.Fatalf("duplicate ID = %q, want %q", duplicate.ID, first.ID)
+	}
+	time.Sleep(time.Nanosecond)
+	second, created := store.Create(alertB, "flagB")
+	if !created {
+		t.Fatal("second approval should be created")
+	}
+
+	items := store.List(ApprovalPending)
+	if len(items) != 2 {
+		t.Fatalf("pending approvals = %d, want 2", len(items))
+	}
+	if items[0].ID != second.ID || items[1].ID != first.ID {
+		t.Fatalf("approvals not sorted newest-first: got %q then %q", items[0].ID, items[1].ID)
+	}
+}
+
 func TestWebhookUsesCatalogWithoutRemediationAnnotation(t *testing.T) {
 	r, cs := newFakeRemediator(t, "on", false, time.Minute)
 	oldRemediator, oldCatalog, oldStop := flagRemediator, faultCatalog, autonomousStop

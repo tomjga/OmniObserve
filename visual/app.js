@@ -77,7 +77,12 @@ async function remediatorFetch(path, options = {}) {
   }
   const response = await fetch(remediatorURL(path), { ...options, headers });
   const text = await response.text();
-  const body = text ? JSON.parse(text) : {};
+  let body = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch (error) {
+    body = { error: text || response.statusText };
+  }
   if (!response.ok) {
     const message = body.error || `${response.status} ${response.statusText}`;
     throw new Error(message);
@@ -89,6 +94,14 @@ function logActivity(message) {
   const item = document.createElement("li");
   item.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
   activityLog.prepend(item);
+}
+
+function renderEmptyApproval(message) {
+  approvalList.innerHTML = "";
+  const empty = document.createElement("div");
+  empty.className = "empty";
+  empty.textContent = message;
+  approvalList.append(empty);
 }
 
 async function loadHealth() {
@@ -108,10 +121,7 @@ function renderApprovals(approvals) {
   pendingCount.textContent = approvals.filter((approval) => approval.status === "pending").length;
 
   if (approvals.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "No approval requests are currently reported by the remediator.";
-    approvalList.append(empty);
+    renderEmptyApproval("No approval requests are currently reported by the remediator.");
     return;
   }
 
@@ -132,8 +142,8 @@ function renderApprovals(approvals) {
     const deny = node.querySelector(".deny");
     approve.disabled = !approval.can_approve;
     deny.disabled = !approval.can_approve;
-    approve.addEventListener("click", () => decideApproval(approval.id, "approve"));
-    deny.addEventListener("click", () => decideApproval(approval.id, "deny"));
+    approve.addEventListener("click", () => decideApproval(approval.id, "approve", [approve, deny]));
+    deny.addEventListener("click", () => decideApproval(approval.id, "deny", [approve, deny]));
     card.dataset.approvalId = approval.id;
     approvalList.append(node);
   }
@@ -145,31 +155,43 @@ async function loadApprovals() {
     renderApprovals(body.approvals || []);
     logActivity("approval queue refreshed");
   } catch (error) {
-    approvalList.innerHTML = `<div class="empty">Approval queue unavailable: ${error.message}</div>`;
+    renderEmptyApproval(`Approval queue unavailable: ${error.message}`);
     pendingCount.textContent = "n/a";
     logActivity(`approval refresh failed: ${error.message}`);
   }
 }
 
-async function decideApproval(id, decision) {
+async function decideApproval(id, decision, controls = []) {
   const actor = "visual-control-room";
   const note = decision === "approve" ? "Approved from visual control room" : "Denied from visual control room";
+  const verb = decision === "approve" ? "approved" : "denied";
+  controls.forEach((control) => {
+    control.disabled = true;
+  });
   try {
     const body = await remediatorFetch(`/approvals/${id}/${decision}`, {
       method: "POST",
       body: JSON.stringify({ actor, note })
     });
     const approval = body.approval || {};
-    logActivity(`${decision}d ${approval.flag || id}: ${approval.outcome || approval.status}`);
+    logActivity(`${verb} ${approval.flag || id}: ${approval.outcome || approval.status}`);
     await refreshAll();
   } catch (error) {
     logActivity(`${decision} failed for ${id}: ${error.message}`);
+    controls.forEach((control) => {
+      control.disabled = false;
+    });
   }
 }
 
 async function queryPrometheus(query) {
   const response = await fetch(prometheusURL(query));
-  const body = await response.json();
+  let body;
+  try {
+    body = await response.json();
+  } catch (error) {
+    throw new Error(response.statusText || "Prometheus returned non-JSON response");
+  }
   if (!response.ok || body.status !== "success") {
     throw new Error(body.error || `${response.status} ${response.statusText}`);
   }
