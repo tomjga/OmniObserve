@@ -7,6 +7,7 @@ set -euo pipefail
 #   - OTel Collector       (our collector/otelcol-config.yaml, in-cluster)
 #   - Grafana Tempo datasource
 #   - the OpenTelemetry Demo as a real observed workload, routed into our collector
+#   - optional Grafana Alloy pod-log shipping to Loki (INSTALL_ALLOY=1)
 #
 # Loki (logs) is optional and left out here to keep the first run robust — the
 # collector's logs pipeline will log export errors until Loki exists; traces +
@@ -51,6 +52,14 @@ fi
 kubectl apply -n "$NS" -f "$ROOT/collector/k8s/collector.yaml"
 kubectl rollout restart deployment/otelcol -n "$NS" >/dev/null 2>&1 || true
 
+if [ "${INSTALL_ALLOY:-0}" = "1" ]; then
+  echo "==> Grafana Alloy (optional pod logs -> Loki)"
+  kubectl apply -f "$ROOT/LGTM/alloy/k8s.yaml"
+  kubectl -n "$NS" rollout status ds/alloy --timeout=180s || true
+else
+  echo "==> Grafana Alloy skipped (set INSTALL_ALLOY=1 after Loki exists if pod logs are needed)"
+fi
+
 echo "==> Grafana Tempo datasource"
 kubectl apply -f "$ROOT/workloads/otel-demo/grafana-tempo-datasource.yaml"
 
@@ -79,6 +88,7 @@ cat <<EOF
 ==> Telemetry layer up. Verify in Grafana:
   kubectl -n $NS port-forward svc/kps-grafana 3000:80      # login admin / prom-operator
   # Grafana -> Explore -> Tempo -> Search -> recent traces (frontend -> cartservice -> ...)
+  # Optional pod logs: INSTALL_ALLOY=1 ./bootstrap-telemetry.sh
 
 Inject a realistic fault (demo flagd feature flags), then watch the error signal:
   kubectl -n otel-demo get configmap          # flagd-config holds the feature flags
