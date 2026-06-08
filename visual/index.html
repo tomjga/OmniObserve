@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OmniObserve Control Room</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">OmniObserve</p>
+          <h1>Self-heal control room</h1>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <div>
+            <span class="label">Remediator</span>
+            <strong id="healthStatus">Unknown</strong>
+          </div>
+          <div>
+            <span class="label">Pending approvals</span>
+            <strong id="pendingCount">0</strong>
+          </div>
+          <div>
+            <span class="label">Last refresh</span>
+            <strong id="lastRefresh">Never</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="Connection settings">
+        <label>
+          <span>Remediator URL</span>
+          <input id="endpointInput" type="url" value="http://localhost:8080" spellcheck="false">
+        </label>
+        <label>
+          <span>Approval token</span>
+          <input id="tokenInput" type="password" placeholder="Optional" autocomplete="off">
+        </label>
+        <label>
+          <span>Prometheus URL</span>
+          <input id="prometheusInput" type="url" value="http://localhost:9090" spellcheck="false">
+        </label>
+        <button id="refreshButton" type="button">Refresh</button>
+      </section>
+
+      <section class="layout">
+        <div class="panel queue-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Human gate</p>
+              <h2>Approval queue</h2>
+            </div>
+            <button id="reloadApprovalsButton" class="secondary" type="button">Reload</button>
+          </div>
+          <div id="approvalList" class="approval-list" aria-live="polite"></div>
+        </div>
+
+        <aside class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Reporting</p>
+              <h2>Signal contract</h2>
+            </div>
+          </div>
+          <div id="metricList" class="metric-list"></div>
+        </aside>
+      </section>
+
+      <section class="panel audit-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Audit</p>
+            <h2>Activity</h2>
+          </div>
+          <button id="clearLogButton" class="secondary" type="button">Clear</button>
+        </div>
+        <ol id="activityLog" class="activity-log"></ol>
+      </section>
+    </main>
+
+    <template id="approvalTemplate">
+      <article class="approval-card">
+        <div class="approval-main">
+          <div>
+            <p class="eyebrow alertname"></p>
+            <h3 class="summary"></h3>
+          </div>
+          <span class="badge status"></span>
+        </div>
+        <dl class="facts">
+          <div>
+            <dt>Service</dt>
+            <dd class="service"></dd>
+          </div>
+          <div>
+            <dt>Flag</dt>
+            <dd class="flag"></dd>
+          </div>
+          <div>
+            <dt>Incident</dt>
+            <dd class="incident"></dd>
+          </div>
+          <div>
+            <dt>Outcome</dt>
+            <dd class="outcome"></dd>
+          </div>
+        </dl>
+        <div class="actions">
+          <button class="approve" type="button">Approve fix</button>
+          <button class="deny secondary" type="button">Deny</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

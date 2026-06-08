@@ -149,6 +149,7 @@ func main() {
 		envInt("REMEDIATOR_NOOP_STORM_THRESHOLD", 3),
 		time.Duration(envInt("REMEDIATOR_NOOP_STORM_WINDOW_SECONDS", 900))*time.Second,
 	)
+	approvalStore = NewApprovalStore()
 	var catalogErr error
 	faultCatalog, catalogErr = LoadFaultCatalog(envStr("REMEDIATION_CATALOG_PATH", "/etc/remediator/fault-catalog.json"))
 	if catalogErr != nil {
@@ -172,10 +173,8 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(otelgin.Middleware("remediator")) // one span per request
 	router.Use(timeoutMiddleware(30 * time.Second))
-
-	router.POST("/webhook", webhookAuthMiddleware(), webhookHandler) // Alertmanager posts here
-	router.GET("/healthz", healthHandler)
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	router.Use(corsMiddleware())
+	registerRoutes(router)
 
 	mode := "observe-only"
 	if flagRemediator != nil {
@@ -185,6 +184,15 @@ func main() {
 	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}
+}
+
+func registerRoutes(router *gin.Engine) {
+	router.POST("/webhook", webhookAuthMiddleware(), webhookHandler) // Alertmanager posts here
+	router.GET("/approvals", approvalAuthMiddleware(), listApprovalsHandler)
+	router.POST("/approvals/:id/approve", approvalAuthMiddleware(), approveApprovalHandler)
+	router.POST("/approvals/:id/deny", approvalAuthMiddleware(), denyApprovalHandler)
+	router.GET("/healthz", healthHandler)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
 // webhookHandler parses an Alertmanager webhook and, for now, only records what it sees.
@@ -277,8 +285,10 @@ func remediate(ctx context.Context, span trace.Span, alert Alert) {
 		}
 		return
 	case AutonomyApproval:
+		approval := queueApproval(alert, flag)
 		recordAction(flag, OutcomeNeedsHuman, span)
 		logger.Warnw("autonomy approval: human approval required before mutation",
+			"approval_id", approval.ID,
 			"flag", flag,
 			"incident_key", alert.incidentKey())
 		if rcaQueue != nil {
@@ -406,6 +416,35 @@ func webhookAuthMiddleware() gin.HandlerFunc {
 		if c.GetHeader("Authorization") != "Bearer "+token {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized webhook"})
 			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func approvalAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := os.Getenv("APPROVAL_BEARER_TOKEN")
+		if token == "" {
+			c.Next()
+			return
+		}
+		if c.GetHeader("Authorization") != "Bearer "+token {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized approval request"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()

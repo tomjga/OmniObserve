@@ -31,6 +31,14 @@ auth:
   secretName: remediator-webhook-auth
   secretKey: token
 
+approval:
+  auth:
+    # Optional bearer auth for GET /approvals and POST /approvals/:id/(approve|deny).
+    # Keep this distinct from Alertmanager's webhook token; humans/tools approve changes.
+    enabled: false
+    secretName: remediator-approval-auth
+    secretKey: token
+
 stop:
   # Global stop switch: route/observe alerts but do not mutate state. Useful during demos
   # and as the production "big red button" pattern.

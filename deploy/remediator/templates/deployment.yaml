@@ -65,6 +65,13 @@ spec:
                   name: {{ .Values.auth.secretName }}
                   key: {{ .Values.auth.secretKey }}
             {{- end }}
+            {{- if .Values.approval.auth.enabled }}
+            - name: APPROVAL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.approval.auth.secretName }}
+                  key: {{ .Values.approval.auth.secretKey }}
+            {{- end }}
             {{- if .Values.rca.enabled }}
             # RCA copilot — non-secret config from values, secrets from .Values.rca.secretName
             # (optional: missing keys just leave the copilot/sinks disabled).

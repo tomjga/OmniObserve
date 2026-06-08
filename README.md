@@ -148,6 +148,10 @@ sequenceDiagram
 - ✅ `remediator` receives Alertmanager webhooks, emits metrics, and is OTel-traced ([`remediator/`](remediator/))
 - ✅ Bounded action disables named flagd fault flags with persisted cooldowns and narrow RBAC
 - ✅ RCA copilot gathers Prometheus evidence, retrieves incident precedents, calls a vendor-agnostic LLM, and publishes to configured sinks
+- ✅ Human approval mode now exposes pending approvals and approve/deny endpoints so guarded
+  fixes can be executed from an operator UI instead of only logged as `needs_human`
+- ✅ Static visual control room lists approval requests, executes approved fixes, and shows
+  the reporting contract for remediator, RCA, and verification metrics ([`visual/`](visual/))
 - ✅ `demo/chaos.sh` validates the unattended runtime-fault loop: fault → alert → heal → RCA
 - ✅ Portfolio recording package, business-impact framing, and maturity scorecard are captured
   in the repo.
@@ -201,6 +205,8 @@ publish it alongside the repo.
   incident memory.
 - [x] Add progressive autonomy modes: `observe`, `suggest`, `approval`, `auto`, and
   `auto-with-verify`.
+- [x] Add a human approval surface with reported pending approvals and an approve button
+  that executes the bounded remediation action.
 
 ### P2 — finish the portfolio shape
 

@@ -22,8 +22,8 @@ func TestMain(m *testing.M) {
 
 func newRouter() *gin.Engine {
 	r := gin.New()
-	r.POST("/webhook", webhookAuthMiddleware(), webhookHandler)
-	r.GET("/healthz", healthHandler)
+	r.Use(corsMiddleware())
+	registerRoutes(r)
 	return r
 }
 
@@ -120,6 +120,25 @@ func TestWebhookBearerAuth(t *testing.T) {
 	}
 }
 
+func TestApprovalBearerAuth(t *testing.T) {
+	t.Setenv("APPROVAL_BEARER_TOKEN", "secret")
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/approvals", nil)
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want 401", w.Code)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/approvals", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d, want 200", w.Code)
+	}
+}
+
 func TestWebhookUsesCatalogWithoutRemediationAnnotation(t *testing.T) {
 	r, cs := newFakeRemediator(t, "on", false, time.Minute)
 	oldRemediator, oldCatalog, oldStop := flagRemediator, faultCatalog, autonomousStop
@@ -188,6 +207,64 @@ func TestAutonomyObserveBlocksMutation(t *testing.T) {
 	}
 	if v := currentVariant(t, cs); v != "on" {
 		t.Fatalf("observe mode mutated flag to %q, want on", v)
+	}
+}
+
+func TestAutonomyApprovalQueuesAndApprovesMutation(t *testing.T) {
+	r, cs := newFakeRemediator(t, "on", false, time.Minute)
+	oldRemediator, oldCatalog, oldStop, oldMode := flagRemediator, faultCatalog, autonomousStop, autonomyMode
+	oldStore, oldGuard := approvalStore, noopGuard
+	flagRemediator, faultCatalog, autonomousStop, autonomyMode = r, defaultFaultCatalog(), false, AutonomyApproval
+	approvalStore, noopGuard = NewApprovalStore(), NewNoopStormGuard(3, time.Minute)
+	defer func() {
+		flagRemediator, faultCatalog, autonomousStop, autonomyMode = oldRemediator, oldCatalog, oldStop, oldMode
+		approvalStore, noopGuard = oldStore, oldGuard
+	}()
+
+	payload := `{"status":"firing","alerts":[
+		{"status":"firing","labels":{"alertname":"ProductCatalogHighErrorRate","service":"product-catalog","severity":"critical"},
+		 "annotations":{"summary":"approval should gate mutation"}}]}`
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("webhook status = %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	if v := currentVariant(t, cs); v != "on" {
+		t.Fatalf("approval mode mutated flag to %q before approval, want on", v)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/approvals?status=pending", nil)
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list approvals status = %d, want 200", w.Code)
+	}
+	var listed struct {
+		Approvals []ApprovalView `json:"approvals"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("approvals body not JSON: %v", err)
+	}
+	if len(listed.Approvals) != 1 {
+		t.Fatalf("pending approvals = %d, want 1", len(listed.Approvals))
+	}
+	if !listed.Approvals[0].CanApprove {
+		t.Fatal("pending approval should be approvable")
+	}
+
+	w = httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"actor":"test","note":"approve fixture remediation"}`)
+	req = httptest.NewRequest(http.MethodPost, "/approvals/"+listed.Approvals[0].ID+"/approve", body)
+	req.Header.Set("Content-Type", "application/json")
+	newRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	if v := currentVariant(t, cs); v != "off" {
+		t.Fatalf("approved remediation left flag %q, want off", v)
 	}
 }
 
