@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>OmniObserve Control Room</title>
+    <title>OmniObserve Exercise</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
@@ -11,7 +11,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">OmniObserve</p>
-          <h1>Self-heal control room</h1>
+          <h1>Self-heal exercise</h1>
         </div>
         <div class="status-strip" aria-live="polite">
           <div>
@@ -29,54 +29,75 @@
         </div>
       </header>
 
-      <section class="toolbar" aria-label="Connection settings">
-        <label>
-          <span>Remediator URL</span>
-          <input id="endpointInput" type="url" value="http://localhost:8080" spellcheck="false">
-        </label>
-        <label>
-          <span>Approval token</span>
-          <input id="tokenInput" type="password" placeholder="Optional" autocomplete="off">
-        </label>
-        <label>
-          <span>Prometheus URL</span>
-          <input id="prometheusInput" type="url" value="http://localhost:9090" spellcheck="false">
-        </label>
-        <button id="refreshButton" type="button">Refresh</button>
-      </section>
-
-      <section class="layout">
-        <div class="panel queue-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Human gate</p>
-              <h2>Approval queue</h2>
-            </div>
-            <button id="reloadApprovalsButton" class="secondary" type="button">Reload</button>
-          </div>
-          <div id="approvalList" class="approval-list" aria-live="polite"></div>
+      <section class="exercise-card">
+        <div>
+          <p class="eyebrow">Exercise</p>
+          <h2>Runtime fault approval gate</h2>
         </div>
-
-        <aside class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Reporting</p>
-              <h2>Signal contract</h2>
-            </div>
-          </div>
-          <div id="metricList" class="metric-list"></div>
-        </aside>
+        <div class="exercise-actions">
+          <button id="openControlRoomButton" type="button">Open control room</button>
+          <button id="quickRefreshButton" class="secondary" type="button">Refresh signals</button>
+        </div>
       </section>
 
-      <section class="panel audit-panel">
-        <div class="panel-heading">
+      <section id="controlRoomCard" class="control-room-card" hidden>
+        <div class="control-room-heading">
           <div>
-            <p class="eyebrow">Audit</p>
-            <h2>Activity</h2>
+            <p class="eyebrow">Control room</p>
+            <h2>Approval and reporting</h2>
           </div>
-          <button id="clearLogButton" class="secondary" type="button">Clear</button>
+          <button id="closeControlRoomButton" class="secondary" type="button">Close</button>
         </div>
-        <ol id="activityLog" class="activity-log"></ol>
+
+        <section class="toolbar" aria-label="Connection settings">
+          <label>
+            <span>Remediator URL</span>
+            <input id="endpointInput" type="url" value="http://localhost:8080" spellcheck="false">
+          </label>
+          <label>
+            <span>Approval token</span>
+            <input id="tokenInput" type="password" placeholder="Optional" autocomplete="off">
+          </label>
+          <label>
+            <span>Prometheus URL</span>
+            <input id="prometheusInput" type="url" value="http://localhost:9090" spellcheck="false">
+          </label>
+          <button id="refreshButton" type="button">Refresh</button>
+        </section>
+
+        <section class="layout">
+          <div class="panel queue-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Human gate</p>
+                <h2>Approval queue</h2>
+              </div>
+              <button id="reloadApprovalsButton" class="secondary" type="button">Reload</button>
+            </div>
+            <div id="approvalList" class="approval-list" aria-live="polite"></div>
+          </div>
+
+          <aside class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Reporting</p>
+                <h2>Signal contract</h2>
+              </div>
+            </div>
+            <div id="metricList" class="metric-list"></div>
+          </aside>
+        </section>
+
+        <section class="panel audit-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Audit</p>
+              <h2>Activity</h2>
+            </div>
+            <button id="clearLogButton" class="secondary" type="button">Clear</button>
+          </div>
+          <ol id="activityLog" class="activity-log"></ol>
+        </section>
       </section>
     </main>
 

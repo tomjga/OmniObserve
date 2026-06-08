@@ -1,6 +1,7 @@
 # OmniObserve visual control room
 
-Static operator UI for the remediator approval gate.
+Static exercise UI for the remediator approval gate. The main page stays on the exercise
+surface; the operational control room opens as an inline card when needed.
 
 ## Run
 

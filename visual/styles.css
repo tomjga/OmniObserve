@@ -66,6 +66,8 @@ button.secondary:hover {
 }
 
 .topbar,
+.exercise-card,
+.control-room-card,
 .toolbar,
 .panel {
   background: var(--surface);
@@ -80,6 +82,38 @@ button.secondary:hover {
   gap: 24px;
   align-items: stretch;
   padding: 22px;
+}
+
+.exercise-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.exercise-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.control-room-card {
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.control-room-card[hidden] {
+  display: none;
+}
+
+.control-room-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
 }
 
 .eyebrow {
@@ -145,7 +179,7 @@ h3 {
   grid-template-columns: minmax(220px, 1.3fr) minmax(180px, 0.8fr) minmax(220px, 1.1fr) auto;
   gap: 12px;
   align-items: end;
-  margin-top: 16px;
+  margin-top: 14px;
   padding: 14px;
 }
 
@@ -320,12 +354,18 @@ dd {
 
 @media (max-width: 1000px) {
   .topbar,
+  .exercise-card,
   .layout {
     grid-template-columns: 1fr;
   }
 
-  .topbar {
+  .topbar,
+  .exercise-card {
     display: grid;
+  }
+
+  .exercise-actions {
+    justify-content: start;
   }
 
   .toolbar {
@@ -343,6 +383,10 @@ dd {
   .toolbar,
   .facts {
     grid-template-columns: 1fr;
+  }
+
+  .control-room-heading {
+    display: grid;
   }
 
   .approval-main {

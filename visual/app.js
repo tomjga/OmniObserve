@@ -1,6 +1,10 @@
 const endpointInput = document.querySelector("#endpointInput");
 const tokenInput = document.querySelector("#tokenInput");
 const prometheusInput = document.querySelector("#prometheusInput");
+const controlRoomCard = document.querySelector("#controlRoomCard");
+const openControlRoomButton = document.querySelector("#openControlRoomButton");
+const closeControlRoomButton = document.querySelector("#closeControlRoomButton");
+const quickRefreshButton = document.querySelector("#quickRefreshButton");
 const refreshButton = document.querySelector("#refreshButton");
 const reloadApprovalsButton = document.querySelector("#reloadApprovalsButton");
 const clearLogButton = document.querySelector("#clearLogButton");
@@ -55,6 +59,16 @@ function saveSettings() {
   localStorage.setItem("omniobserve.endpoint", endpointInput.value.trim());
   localStorage.setItem("omniobserve.token", tokenInput.value.trim());
   localStorage.setItem("omniobserve.prometheus", prometheusInput.value.trim());
+}
+
+function setControlRoomOpen(open) {
+  controlRoomCard.hidden = !open;
+  openControlRoomButton.textContent = open ? "Control room open" : "Open control room";
+  openControlRoomButton.disabled = open;
+  if (open) {
+    refreshAll();
+    controlRoomCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function remediatorURL(path) {
@@ -240,6 +254,9 @@ async function refreshAll() {
 }
 
 refreshButton.addEventListener("click", refreshAll);
+quickRefreshButton.addEventListener("click", refreshAll);
+openControlRoomButton.addEventListener("click", () => setControlRoomOpen(true));
+closeControlRoomButton.addEventListener("click", () => setControlRoomOpen(false));
 reloadApprovalsButton.addEventListener("click", loadApprovals);
 clearLogButton.addEventListener("click", () => {
   activityLog.innerHTML = "";
