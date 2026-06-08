@@ -1,7 +1,6 @@
 # api-service Helm chart
 
-Deploys the OTel-instrumented `api-service` to Kubernetes. Replaces the earlier
-incomplete `application/deploy.yaml` (a template with no `Chart.yaml`).
+Deploys the OTel-instrumented `api-service` from `services/api-service` to Kubernetes.
 
 ```bash
 helm upgrade --install api-service deploy/api-service -n monitoring

@@ -12,7 +12,7 @@ flagd at its ConfigMap so the self-heal loop works.
 | `helm_release.argo_rollouts` | Argo Rollouts controller |
 | `helm_release.tempo` | tempo-distributed |
 | `helm_release.otel_demo` | the OpenTelemetry Demo workload |
-| `helm_release.api_service` / `remediator` | the in-house charts (local images) |
+| `helm_release.api_service` / `worker_service` / `remediator` | the in-house charts (local images) |
 | `kubernetes_config_map.otelcol` / `kubectl_manifest.collector` | the OTel Collector |
 | `kubernetes_secret.grafana_cloud` | Grafana Cloud OTLP creds (placeholder by default) |
 | `kubectl_manifest.rules` / `datasource` | PrometheusRule + Tempo datasource |

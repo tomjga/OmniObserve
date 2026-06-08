@@ -100,6 +100,27 @@ resource "helm_release" "api_service" {
   depends_on = [helm_release.kps, helm_release.argo_rollouts, null_resource.build_api_service]
 }
 
+resource "helm_release" "worker_service" {
+  name      = "worker-service"
+  chart     = "${var.repo_root}/deploy/worker-service"
+  namespace = var.namespace
+
+  set {
+    name  = "image.repository"
+    value = "omniobserve-worker-service"
+  }
+  set {
+    name  = "image.tag"
+    value = "local"
+  }
+  set {
+    name  = "image.pullPolicy"
+    value = "IfNotPresent"
+  }
+
+  depends_on = [helm_release.api_service, null_resource.build_worker_service]
+}
+
 resource "helm_release" "remediator" {
   name      = "remediator"
   chart     = "${var.repo_root}/deploy/remediator"

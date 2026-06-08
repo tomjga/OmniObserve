@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [application, remediator]
+        service: [services/api-service, services/shared/telemetry, services/worker-service, remediator]
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [application, remediator]
+        service: [services/api-service, services/shared/telemetry, services/worker-service, remediator]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [application, remediator]
+        service: [services/api-service, services/shared/telemetry, services/worker-service, remediator]
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -103,6 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
-      - run: helm lint deploy/api-service deploy/remediator
+      - run: helm lint deploy/api-service deploy/worker-service deploy/remediator
       - run: helm template api-service deploy/api-service > /dev/null
+      - run: helm template worker-service deploy/worker-service > /dev/null
       - run: helm template remediator deploy/remediator > /dev/null

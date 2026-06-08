@@ -3,7 +3,15 @@ resource "null_resource" "build_api_service" {
   count    = var.build_images ? 1 : 0
   triggers = { always = timestamp() }
   provisioner "local-exec" {
-    command = "docker build -t omniobserve-api-service:local '${abspath(var.repo_root)}/application'"
+    command = "docker build -f '${abspath(var.repo_root)}/services/api-service/Dockerfile' -t omniobserve-api-service:local '${abspath(var.repo_root)}'"
+  }
+}
+
+resource "null_resource" "build_worker_service" {
+  count    = var.build_images ? 1 : 0
+  triggers = { always = timestamp() }
+  provisioner "local-exec" {
+    command = "docker build -f '${abspath(var.repo_root)}/services/worker-service/Dockerfile' -t omniobserve-worker-service:local '${abspath(var.repo_root)}'"
   }
 }
 

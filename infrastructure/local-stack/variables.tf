@@ -23,7 +23,7 @@ variable "repo_root" {
 }
 
 variable "build_images" {
-  description = "Build the local api-service + remediator images via docker before deploying."
+  description = "Build the local api-service, worker-service, and remediator images via docker before deploying."
   type        = bool
   default     = true
 }

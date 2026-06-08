@@ -7,21 +7,17 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/gin-gonic/gin"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	_ "github.com/tomjga/OmniObserve/services/api-service/docs"
+	"github.com/tomjga/OmniObserve/services/shared/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-)
-import (
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-	_ "github.com/tomjga/OmniObserve/application/docs"
+	"go.uber.org/zap"
 )
 
 // Global logger
@@ -52,7 +48,7 @@ var (
 
 func main() {
 	// Initialize OpenTelemetry tracing (replaces the old Datadog tracer).
-	shutdownTracer, err := initTracer()
+	shutdownTracer, err := telemetry.InitTracer(context.Background(), "api-service", version)
 	if err != nil {
 		panic(err)
 	}

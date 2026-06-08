@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: omniobserve
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/tomjga/OmniObserve.git # Reference your fork repo here
+    targetRevision: HEAD
+    path: deploy/api-service
+    helm:
+      valueFiles:
+        - values.yaml       # Reference your values file here
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: omniobserve
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:           
+      prune: true
+      selfHeal: true

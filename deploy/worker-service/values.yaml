@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/tomjga/omniobserve-worker-service
+  tag: ""
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+otel:
+  endpoint: "http://otelcol:4317"
+
+worker:
+  targetURL: "http://api-service:8080/benchmark?max_delay=25"
+  concurrency: 2
+  intervalMs: 500
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 150m
+    memory: 96Mi

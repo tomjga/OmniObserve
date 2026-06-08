@@ -53,12 +53,19 @@ helm upgrade --install argo-rollouts argo/argo-rollouts -n argo-rollouts --creat
 echo "==> Build api-service image locally (k3s uses the docker runtime — no registry push needed)"
 VERSION="$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)"
 echo "    version: $VERSION"
-docker build --build-arg VERSION="$VERSION" -t omniobserve-api-service:local "$ROOT/application"
+docker build -f "$ROOT/services/api-service/Dockerfile" --build-arg VERSION="$VERSION" -t omniobserve-api-service:local "$ROOT"
 
 echo "==> Deploy api-service as a canary Rollout"
 helm upgrade --install api-service "$ROOT/deploy/api-service" -n "$NS" \
   --set rollout.enabled=true \
   --set image.repository=omniobserve-api-service \
+  --set image.tag=local \
+  --set image.pullPolicy=IfNotPresent
+
+echo "==> Build + deploy worker-service (steady synthetic traffic for SLO demos)"
+docker build -f "$ROOT/services/worker-service/Dockerfile" --build-arg VERSION="$VERSION" -t omniobserve-worker-service:local "$ROOT"
+helm upgrade --install worker-service "$ROOT/deploy/worker-service" -n "$NS" \
+  --set image.repository=omniobserve-worker-service \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent
 
