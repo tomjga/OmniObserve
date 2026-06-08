@@ -46,6 +46,9 @@ Stop the regression load (`Ctrl-C`) and the next rollout attempt promotes cleanl
 > knob. The control loop being demonstrated — SLO query → analysis fail → auto-rollback
 > — is exactly what a real regression would trigger.
 
+For the final portfolio cut, use the 90-second recording package in
+[`recording.md`](recording.md).
+
 ---
 
 # Demo: autonomous self-heal + RCA (Phase 2)
@@ -65,15 +68,19 @@ disables the offending feature flag (heal) → the RCA copilot drafts a grounded
 ## Walkthrough
 
 ```bash
-./demo/chaos.sh            # inject the fault, then watch the heal + RCA, with timing
-./demo/chaos.sh --status   # current flag state + recent remediator activity
-./demo/chaos.sh --reset    # force the flag back off (cleanup after an aborted run)
+./demo/chaos.sh            # product-catalog default: inject -> heal -> RCA
+./demo/chaos.sh ad         # run the ad catalog entry
+./demo/chaos.sh cart       # run the cart catalog entry
+./demo/chaos.sh --status   # current product-catalog flag + recent remediator activity
+./demo/chaos.sh --status ad
+./demo/chaos.sh --reset cart
 ```
 
-The script flips `productCatalogFailure` **on**, then polls until the remediator flips it
-back **off** (the heal), reports the time-to-heal, and surfaces this run's `remediation`
-and `rca drafted` log lines. The existing otel-demo load generator already drives the
-traffic, so nothing else is needed.
+The script reads `deploy/remediator/files/fault-catalog.json`, flips the selected service's
+flag **on**, then polls until the remediator flips it back **off** (the heal), reports the
+time-to-heal, and surfaces this run's `remediation` and `rca drafted` log lines. The
+existing otel-demo load generator already drives product-catalog traffic; lower-traffic
+services may need extra load before their alert fires.
 
 **Validated run:** heal in ~130s (the alert's `for: 1m` + scrape interval + error-ratio
 build-up under low load), followed by a ~2.5k-char Gemini RCA grounded in the 7-incident
